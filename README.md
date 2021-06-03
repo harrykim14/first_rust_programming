@@ -177,13 +177,6 @@ fn main() {
 
 - 정수 타입: 각 타입은 부호가 있거나 없으며 명시적인 크기가 정해져있다
 
-<style>
-div.numberTable th { 
-    background: #CCC;
-}
-</style>
-<div class="numberTable">
-
 | 크기  | 부호 있음 | 부호 없음 |
 | ----- | --------- | --------- |
 | 8bit  | i8        | u8        |
@@ -191,8 +184,6 @@ div.numberTable th {
 | 32bit | i32       | u32       |
 | 64bit | i64       | u64       |
 | arch  | isize     | usize     |
-
-</div>
 
 - 러스트는 소수점을 가진 숫자를 처리하기 위해 두 개의 부동 소수점 타입을 제공함(64비트 소수점 타입인 f64가 기본 타입)
 - 사칙연산은 다른 프로그래밍 언어와 동일(+, -, \*, /, %)
@@ -318,6 +309,182 @@ fn for_example_two() {
     }
 }
 ```
+
+</div>
+</details>
+
+### Chapter 4. 소유권
+
+<details>
+<summary>열기</summary>
+<div markdown="4">
+
+- 소유권은 러스트의 독특한 기능 중 하나로 가비지 컬렉터에 의존하지 않고도 메모리 안전성을 보장하려는 러스트만의 해법이다
+- 소유권과 더불어 대여, 슬라이스, 그리고 메모리 관리법에 대해 알아두어야 한다
+
+**4.1 소유권 규칙**
+
+- 러스트가 다루는 각각의 값은 소유자라고 부르는 변수를 가지고 있다
+- 특정 시점에 값의 소유자는 단 하나뿐
+- 소유자가 범위를 벗어나면 그 값은 제거된다
+- 변수의 유효범위
+
+```rust
+{   // 이 시점에서는 s를 선언하지 않았으므로 유효하지 않음
+    let s = "hello"; // 이 지점부터 유효
+    // 변수 s를 이용해 필요한 동작을 수행함
+}   // 이 범위를 벗어나면 s는 유효하지 않음
+```
+
+- 타입들은 모두 스택에 저장되며 스코프를 벗어나면 스택에서 제거됨
+- 힙에 저장되는 데이터들을 러스트가 어떻게 제거하는가?
+- String 타입과 문자열 리터럴은 다르게 작동한다
+- String 타입은 변경할 수 있지만 리터럴은 변경할 수 없다
+
+```rust
+fn string_literal() {
+    let s = String::from("hello");
+    println!("{}", s);
+    // println!(s);
+    // format argument must be a string literal
+} // rust는 닫는 중괄호를 만나면 자동으로 drop 함수를 호출하여 메모리에서 해제한다
+
+fn move_example() {
+    // s1은 포인터, 길이, 용량으로 이루어져있다
+    // 해당 포인터는 문자열의 인덱스와 값을 가지고 있음
+    let s1 = String::from("hello");
+    // s2 = s1을 실행하면 s1, s2의 포인터가 같은 인덱스를 가리키게 된다
+    // 혹여나 s1이 drop으로 메모리에서 해제된다면 s2까지 해당 인덱스를 사용할 수 없게 되는데
+    // 이런 경우 메모리의 불순화(이중 해제 에러)를 일으킬 수 있다
+    let s2 = s1;
+    // 따라서 s2에 s1을 대입한 경우 println!("{}, world", s1)를 실행하면
+    // borrow of moved value: `s1` 와 같이 s1 값이 "이동됨(moved)"에 따라 실행 할 수 없게 된다
+    // rust는 얕은 복사나 깊은 복사의 개념이 아니라 이런 식으로 첫 번째 변수(s1)를 무효화 시키므로 "이동했다"고 표현한다
+    println!("{}, world", s2);
+}
+
+fn clone_example() {
+    // 변수와 데이터가 상호작용하는 방식으로는 복제(clone)가 있다
+    // 힙 데이터가 그대로 복사되기 때문에 복사하는 메모리의 크기에 따라서는 무거운 작업일 수도 있다
+    let s1 = String::from("hello");
+    let s2 = s1.clone();
+    println!("{}, world! {}!", s1, s2);
+}
+
+fn copy_example() {
+    let x = 5;
+    let y = x;
+    println!("x = {}, y = {}", x, y);
+    /*
+        이 코드는 정상적으로 실행되는 것 처럼 보임
+        정수형 타입은 스택에 저장되므로 힙에 저장되는 타입처럼 "이동"되지 않는다
+        러스트는 이렇게 스택에 저장되는 정수형 타입에 적용할 수 있는 Copy trait라는 특별한 특성을 제공한다
+        u32와 같은 모든 정수형 타입, bool, char, f64와 같은 부동 소수점 타입, (i32, i32)와 같은 Copy trait를 적용된 타입을 포함하는 튜플
+        하지만 (i32, String)과 같은 튜플에는 적용되지 않는다
+    */
+}
+```
+
+- 소유권(Ownership)과 범위
+
+```rust
+fn owner_exmaple() {
+    let s = String::from("hello");
+    takes_ownership(s);
+
+    let x = 5;
+    makes_copy(x);
+}
+
+fn takes_ownership(some_string: String) {
+    println!("{}", some_string);
+}
+
+fn makes_copy(some_integer: i32) {
+    println!("{}", some_integer);
+}
+```
+
+- 리턴값과 변수의 범위
+
+```rust
+fn return_example() {
+    let s1 = gives_ownership(); // 리턴값이 s1으로 옮겨짐
+    let s2 = String::from("hello"); // s2 변수 생성
+    let s3 = takes_and_gives_back(s2); // s2는 함수 내로 옮겨지고 s3에 리턴값이 할당됨
+
+    println!("{}? {}!", s1, s3);
+} // s1, s3은 drop되고 s2는 함수로 옮겨졌기 때문에 아무것도 일어나지 않음
+
+fn gives_ownership() -> String {
+    // 변수 some_string이 생성
+    let some_string = String::from("hello");
+    some_string // 이 값이 리턴되면서 호출한 함수로 옮겨짐
+}
+
+fn takes_and_gives_back(a_string: String) -> String {
+    // a_string이 생성되고 리턴되면서 호출한 함수로 옮겨짐
+    a_string
+}
+```
+
+- 참조 변수와 가변 참조
+
+```rust
+fn lental_example() {
+    let mut s1 = String::from("hello");
+    // &로 참조할 수 있으며 &s1 문법을 이용하여 "소유권은 가져오지 않는 참조"를 생성할 수 있다
+    // 이 경우에는 범위를 벗어나도 drop되지 않는다
+    let len = calculate_length(&s1);
+    // 따라서 여기서 호출 할 수 있다
+    println!("'{}'의 길이는 {}입니다.", s1, len);
+    change(&mut s1);
+}
+
+fn calculate_length(s: &String) -> usize {
+    s.len()
+}
+
+// 변수가 기본적으로 불변인 것처럼 참조도 기본적으로 불변이다
+// fn change(some_string: &String) {
+// 따라서 &mut와 같이 가변 참조로 정의해주어야 한다
+fn change(some_string: &mut String) {
+    some_string.push_str(", world");
+}
+```
+
+- 데이터 경합은 **둘 혹은 그 이상의 포인터가 동시에 같은 데이터를 쓰거나 읽기 위해 접근할 때**, **최소한 하나의 포인터가 데이터를 쓰기 위해 사용될 때**, **데이터에 대한 접근을 동기화 할 수 있는 메커니즘이 없을 때** 일어난다
+- 따라서 스코프를 임의로 설정하면 가변 참조를 여러번 사용할 수 있다
+
+```rust
+fn reference_example() {
+    let mut s = String::from("hello");
+    {
+        let r1 = &mut s;
+        println!("r1:{}", r1);
+    } // scope를 임의로 설정함으로써 가변 참조를 여러 번 사용할 수 있도록 함
+    let r2 = &mut s;
+
+    // println!("r1:{}, r2:{}", r1, r2);
+    println!("r2:{}", r2);
+    // 따라서 cannot find value `r1` in this scope 와 같은 오류가 발생함
+}
+```
+
+- 스코프를 벗어나면 메모리에서 drop되기 때문에 **죽은 참조**가 발생할 수 있다
+
+```rust
+fn death_example() -> &String {
+    let s = String::from("hello");
+
+    &s
+} // 이 함수의 리턴 타입은 대여한 값을 리턴하고자 하지만 실제로 대여해 올 값이 존재하지 않는다.
+```
+
+- 어느 한 시점에 코드는 하나의 가변 참조 또는 여러 개의 불변 참조를 생성할 수는 있지만 둘 모두를 생성할 수는 없다
+- 또한 참조는 항상 유효해야 한다
+- 러스트에는 소유권을 갖지 않는 **슬라이스 타입**이 있다
+- 이 슬라이스를 이용하면 컬렉션 전체가 아니라 컬렉션 내의 연속된 요소들을 참조할 수 있다
 
 </div>
 </details>
