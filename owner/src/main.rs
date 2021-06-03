@@ -11,6 +11,7 @@ fn main() {
     let mut s = String::from("hello");
     let len = first_word(&mut s);
     println!("hello의 길이: {}", len);
+    slice_word();
 }
 
 fn string_literal() {
@@ -152,4 +153,20 @@ fn first_word(s: &String) -> usize {
         }
     }
     s.len()
+}
+
+fn slice_word() {
+    let s = String::from("hello world");
+
+    let hello = &s[0..5];
+    let world = &s[6..11];
+    println!("{}, {}!", hello, world);
+    let slice1 = &s[0..5];
+    let slice2 = &s[..5];
+    println!("{}? {}!", slice1, slice2);
+
+    let len = s.len();
+    let slice3 = &s[0..len];
+    let slice4 = &s[..];
+    println!("{}? {}!", slice3, slice4);
 }

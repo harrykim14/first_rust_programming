@@ -385,7 +385,7 @@ fn copy_example() {
 }
 ```
 
-- 소유권(Ownership)과 범위
+**4.2 소유권(Ownership)과 범위**
 
 ```rust
 fn owner_exmaple() {
@@ -427,6 +427,8 @@ fn takes_and_gives_back(a_string: String) -> String {
     a_string
 }
 ```
+
+**4.3 참조**
 
 - 참조 변수와 가변 참조
 
@@ -483,8 +485,35 @@ fn death_example() -> &String {
 
 - 어느 한 시점에 코드는 하나의 가변 참조 또는 여러 개의 불변 참조를 생성할 수는 있지만 둘 모두를 생성할 수는 없다
 - 또한 참조는 항상 유효해야 한다
+
+**4.4 슬라이스**
+
 - 러스트에는 소유권을 갖지 않는 **슬라이스 타입**이 있다
 - 이 슬라이스를 이용하면 컬렉션 전체가 아니라 컬렉션 내의 연속된 요소들을 참조할 수 있다
+
+```rust
+// 문자열 슬라이스
+let s = String::from("hello world");
+let hello = &s[0..5];
+let world = &s[6..11];
+
+// slice1과 slice2는 동일하게 동작함
+let slice1 = &s[0..2];
+let slice2 = &s[..2];
+
+let len = s.len();
+// slice3과 slice4도 동일하게 동작함
+let slice3 = &s[0..len];
+let slice4 = &s[..];
+```
+
+- 문자열 리터럴은 슬라이스이기 때문에 `let s = "Hello, world!;`와 같이 선언한다면 이 때 s의 타입은 `&str`이고 따라서 문자열 리터럴은 항상 불변이다
+
+```rust
+// 문자열 뿐만 하니라 배열의 슬라이스도 가능하다
+let a = [1, 2, 3, 4, 5];
+let slice = &a[1..3];
+```
 
 </div>
 </details>
