@@ -517,3 +517,101 @@ let slice = &a[1..3];
 
 </div>
 </details>
+
+### Chapter 5. 구조체를 활용한 관련 데이터의 구조화
+
+<details>
+<summary>열기</summary>
+<div markdown="5">
+
+- 구조체는 서로 관련이 있는 여러 값을 의미 있는 하나로 모아 이름을 지정해 접근할 수 있는 사용자 정의 데이터 타입
+- 구조체의 키워드는 struct로 TypeScript의 interface와 유사
+
+```rust
+struct User {
+    username: String,
+    email: String,
+    sign_in_count: u64,
+    active: bool
+}
+
+let mut user1 = User {
+    email: String::from("someone@example.com"),
+    username: String::from("someusername123"),
+    active: true,
+    sign_in_count: 1,
+}
+
+user1.email = String::from("anotheremail@example.com");
+
+fn build_user(email: String, username: String) -> User {
+    User {
+        // email: email,
+        // username: username,
+        email,
+        username,
+        // 변수와 필드 이름이 동일할 때엔 필드 초기화 단축 문법을 사용할 수 있다
+        active: true,
+        sign_in_count: 1,
+    }
+}
+
+let user2 = User {
+    email: String::from("another@example.com"),
+    username: String::from("anotherusername456"),
+    // active: user1.active,
+    // sign_in_count: user1.sign_in_count,
+    ..user1 // 나머지 필드를 이렇게 정의할 수도 있다
+}
+```
+
+- 튜플 구조체는 구조체에 이름을 부여하지만 필드에는 이름을 부여하지 않고 타입만 지정하는 경우를 말한다
+
+```rust
+struct Color(i32, i32, i32);
+struct Point(i32, i32, i32);
+// 튜플 내부가 같은 타입으로 정의되어 있지만 Color와 Point는 다른 타입임
+let black Color(0, 0, 0);
+let origin = Point(0, 0, 0);
+```
+
+- 러스트에서는 필드가 하나도 없는 구조체를 선언할 수도 있는데 이런 구조체를 **유사 유닛 구조체**라고 한다
+
+```rust
+struct User {
+    username: &str, // missing lifetime specifier
+    email: &str, // missing lifetime specifier
+    sign_in_count: u64,
+    active: bool
+}
+
+fn main() {
+    let user1 = User {
+        //...
+    }
+}
+```
+
+- 튜플을 이용한 사각형의 면적 계산 프로그램
+
+```rust
+fn area(width: u32, height: u32) -> u32 {
+    width * height
+}
+
+fn main() {
+    let width1 = 30;
+    let height1 = 50;
+
+    println!("사각형의 면적: {} 제곱 픽셀", area(width1, height1));
+}
+```
+
+- 튜플을 사용해 리팩토링하기
+
+```rust
+
+```
+
+</div>
+</details>
