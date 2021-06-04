@@ -610,7 +610,47 @@ fn main() {
 - 튜플을 사용해 리팩토링하기
 
 ```rust
+fn area(dimensions: (u32, u32)) -> u32 {
+    dimensions.0 * dimensions.1
+}
+```
 
+- 구조체를 이용한 리팩토링
+
+```rust
+fn area(rectangle: &Rectangle) -> u32 {
+    rectangle.width * rectangle.height
+}
+```
+
+- 러스트는 디버깅 정보를 출력하는 기능을 제공하지만 구조체는 명시적으로 구현해주어야 함
+
+```rust
+#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+```
+
+- 함수를 구조체 내에 정의하는 법은 자바스크립트의 prototype과 비슷함
+
+```rust
+impl Rectangle {
+    fn area(&self) -> u32 {
+        self.width * self.height
+    }
+
+    fn can_hold(&self, other: &Rectangle) -> bool {
+        self.width > other.width && self.height > other.height
+    }
+
+    // self 매개변수를 사용하지 않는 함수(연관 함수)의 정의
+    // 이 연관함수는 구조체의 새로운 인스턴스를 리턴하는 생성자를 구현할 때 자주 사용됨
+    fn square(width: u32, height: u32) -> Rectangle {
+        Rectangle { width, height }
+    }
+}
 ```
 
 </div>
