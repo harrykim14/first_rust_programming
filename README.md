@@ -789,3 +789,223 @@ fn iflet() {
 
 </div>
 </details>
+
+### Chapter 7. 패키지, 크레이트, 모듈로 프로젝트 관리하기
+
+<details>
+<summary>열기</summary>
+<div markdown="7">
+
+- 기능을 그룹화하는 것 외에도 구현을 캡슐화하면 코드를 재사용할 수 있다
+- 러스트는 코드의 구조를 관리하기 위한 몇 가지 기능을 제공한다
+  - 패키지: 크레이트를 빌드, 테스트, 공유할 수 있는 카고의 기능
+  - 크레이트: 라이브러리나 실행 파일을 생성하는 모듈의 트리
+  - 모듈과 use: 코드의 구조와 범위, 그리고 경로의 접근성을 제어하는 기능
+  - 경로: 구조체, 함수, 혹은 모듈 등의 이름을 결정하는 방식
+
+**7.1 패키지와 크레이트**
+
+- 크레이트는 하나의 바이너리 혹은 라이브러리로 크레이트 루트는 러스트 컴파일러가 컴파일을 시작해서 크레이트의 루트 모듈을 만들어내는 소스 파일이다
+- 패키지는 일련의 기능을 제공하는 하나 혹은 그 이상의 크레이트로 구성된다
+
+```cmd
+> cargo new my-project
+> ls my-project
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----      2021-06-05   오후 9:36                src
+-a----      2021-06-05   오후 9:36            229 Cargo.toml
+
+> ls my-project/src
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----      2021-06-05   오후 9:36             45 main.rs
+```
+
+**7.2 모듈을 이용한 범위와 접근성 제어**
+
+- 모듈은 크레이트의 코드를 그룹화해서 가독성과 재사용성을 향상하는 방법이다
+
+```
+cargo new --lib restaurant
+> ls restaurant
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----      2021-06-05   오후 9:42                src
+-a----      2021-06-05   오후 9:42            229 Cargo.toml
+
+> ls restaurant/src
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----      2021-06-05   오후 9:42             95 lib.rs
+```
+
+- 레스토랑 시설을 구분하여 모듈로 정의해보자
+
+```rust
+mod front_of_house {
+    mod hosting {
+        fn add_to_waitlist() {}
+
+        fn seat_at_table() {}
+    }
+
+    mod serving {
+        fn take_order() {}
+
+        fn serve_order() {}
+
+        fn take_payment() {}
+    }
+}
+```
+
+**7.3 경로를 이용해 모듈 트리의 아이템 참조하기**
+
+- 절대 경로: 크레이트 이름이나 crate 리터럴을 이용해 크레이트 루트부터 시작하는 경로
+- 상대 경로: 현재 모듈로부터 시작해서 self, super 혹은 현재 모듈의 식별자를 이용함
+- 하지만 절대경로나 상대경로는 해당 모듈이나 열거자가 pub으로 공개되지 않으면 참조할 수 없다
+- 또한, 해당 모듈이 가진 함수나 하위 모듈 또한 기본적으로 은폐되기 때문에 사용하고자 할 때엔 pub 키워드로 열어주어야 함
+
+```rust
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+pub fn eat_at_restaurant() {
+    // 절대 경로: 현재 crate -> front_of_house -> hosting -> add_to_waitlist();
+    crate::front_of_house::hosting::add_to_waitlist();
+
+    // 상대 경로: 같은 소스파일 내에 있는 front_of_house를 참조
+    front_of_house::hosting::add_to_waitlist();
+}
+```
+
+- 상대 경로는 `super` 키워드를 이용해 부모 모듈부터 시작할 수도 있다 (마치 파일 시스템 경로의 ..같은 것)
+
+```rust
+fn serve_order() {}
+
+mod back_of_house {
+    fn fix_incorrect_order() {
+        cook_order();
+        super::serve_order();
+        // super 키워드를 통해 루트 모듈 crate에 접근하여 serve_order()를 찾음
+    }
+
+    fn cook_order() {}
+}
+```
+
+- 구조체를 정의할 때 `pub` 키워드를 사용하면 구조체는 공개되지만 구조체의 필드는 비공개임
+- 반면 열거자를 공개하면 모든 열것값 또한 공개된다
+
+```rust
+mod back_of_house {
+    // seasonal_fruit는 비공개 필드임
+    pub struct Breakfast {
+        pub toast: String,
+        seasonal_fruit: String,
+    }
+
+    impl Breakfast {
+        pub fn summer(toast: &str) -> Breakfast {
+            Breakfast {
+                toast: String::from(toast),
+                seasonal_fruit: String::from("복숭아"),
+            }
+        }
+    }
+
+    // 열거자를 public처리하면 모든 열것값도 public 처리 된다
+    pub enum Appetizer {
+        Soup,
+        Salad,
+    }
+}
+
+pub fn eat_at_restaurant() {
+    let mut meal = back_of_house::Breakfast::summer("호밀빵");
+    meal.toast = String::from("밀빵");
+    // meal.seasonal_fruit;
+    // field `seasonal_fruit` of struct `back_of_house::Breakfast` is private
+    crate::front_of_house::hosting::add_to_waitlist(); // module `hosting` is private
+    front_of_house::hosting::add_to_waitlist();
+    // 아무런 문제 없이 열것값을 사용할 수 있다
+    let order1 = back_of_house::Appetizer::Soup;
+    let order2 = back_of_house::Appetizer::Salad;
+}
+```
+
+**7.4 모듈 사용하기, 내보내기**
+
+- `use` 키워드를 사용하여 경로를 현재 범위로 가져오면 현재 범위의 아이템인 것 처럼 호출할 수 있다 (import와 비슷)
+
+```rust
+mod front_of_house {
+    pub mod hosting {
+    //...
+    }
+}
+use crate::front_of_house::hosting;
+// use self::front_of_house::hosting; 로도 정의할 수 있다
+pub fn eat_at_restaurant() {
+    hosting::add_to_waitlist();
+    // 'crate::front_of_house' 부분을 생략 가능하다
+}
+```
+
+- `as` 키워드를 사용하면 새로운 이름을 부여할 수 있다
+
+```rust
+use std::io::Result as IoResult;
+
+fn function1() -> IoResult<()> {
+    //...
+}
+```
+
+- `pub use` 키워드로 이름을 다시 내보내기
+
+```rust
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+// export default와 비슷한 문법으로 해당 크레이터를 외부로 내보낼 수 있음
+pub use crate::front_of_house::hosting;
+
+pub fn eat_at_restaurant() {
+    hosting::add_to_waitlist();
+}
+```
+
+**7.5 외부 패키지의 사용**
+
+- Cargo.toml 파일 내 dependencies에 정의하고 카고를 통해 해당 패키지를 내려받으면 `use` 커맨드와 함께 어디서든 사용할 수 있다
+- 중첩 경로의 사용
+
+```rust
+// use std::io;
+// use std::cmp::Ordering
+use std::{io, cmp::Ordering};
+
+// use std::io;
+// use std::io::Write;
+use std::io::{self, Write};
+```
+
+- 글롭 연산자
+
+```rust
+use std::collections::*;
+```
+
+</div>
+</details>
