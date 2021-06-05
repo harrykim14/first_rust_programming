@@ -655,3 +655,137 @@ impl Rectangle {
 
 </div>
 </details>
+
+### Chapter 6. 열거자와 패턴 매칭
+
+<details>
+<summary>열기</summary>
+<div markdown="6">
+
+**6.1 열거자(emuns) 정의하기**
+
+- 열거자(enums)는 사용 가능한 값만 나열한 타입을 정의할 때 사용한다
+- 러스트의 열거자는 F#이나 하스켈 같은 함수형 언어의 대수식 데이터 타입에 가까움
+- 열거자에 나열된 각각의 값은 서로 다른 타입과 다른 수의 연관 데이터를 보유할 수 있음
+
+```rust
+enum IpAddressType {
+    V4, // 열거자의 열것값
+    V6,
+}
+
+fn main() {
+    let home = IpAddr {
+        kind: IpAddressType::V4,
+        address: String::from("127.0.0.1"),
+    };
+    let loopback = IpAddr {
+        kind: IpAddressType::V6,
+        address: String::from("::1"),
+    };
+}
+
+struct IpAddr {
+    kind: IpAddressType,
+    address: String,
+}
+
+fn route(ip_type: IpAddressType) {}
+
+```
+
+- 열거자의 값에는 문자열, 숫자, 구조체 등 어떤 종류의 데이터도 저장할 수 있다
+
+```rust
+enum Message {
+    Quit, // 연관 데이터를 갖지 않는 열거자
+    Move { x: i32, y: i32 }, // 익명 구조체를 갖는 열거자
+    Write(String), // 하나의 String 값을 갖는 열거자
+    ChangeColor(i32, i32, i32), // 세 개의 i32 값을 포함하는 열거자
+}
+/* 구조체를 사용한다면 이렇게 나누어져야 한다 ↓ */
+struct QuitMessage;
+struct MoveMessage {
+    x: i32,
+    y: i32,
+}
+
+struct WriteMessage(String);
+struct ChangeColorMessage(i32, i32, i32);
+```
+
+- 러스트에 널값이라는 개념은 없지만 존재 여부를 표현하는 열거자가 Option<T>이다
+- Some 대신 None값을 이용하면 러스트에게 Option<T> 열거자의 타입이 무엇인지를 알려줘야 한다
+
+```rust
+enum Option<T> {
+    Some(T),
+    None,
+}
+```
+
+**6.2 match 흐름 제어 연산자**
+
+- 러스트는 match라는 매우 강력한 흐름 제어 연산자를 제공함
+- 패턴은 리터럴, 변수 이름, 와일드카드를 비롯해 다양한 값으로 구성할 수 있다
+
+```rust
+enum Coin {
+    Penny,
+    Nickle,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -> u32 {
+    match coin {
+        Coin::Penny => 1,
+        Coin::Nickle => 5,
+        Coin::Dime => 10,
+        Coin::Quarter => 25,
+    }
+}
+```
+
+- match는 반드시 모든 경우를 처리해야 함
+
+```rust
+fn plus_one(x: Option<i32>) -> Option<i32> {
+    match x {
+        Some(i) => Some(i + 1),
+        None => None,
+    }
+}
+```
+
+- 모든 경우를 다 처리하고 싶지 않을 때엔 \_ 자리지정자로 대체하면 된다
+
+```rust
+fn placeholder() {
+    let some_u8_value = 0u8;
+    match some_u8_value {
+        1 => println!("one"),
+        3 => println!("three"),
+        5 => println!("five"),
+        7 => println!("seven"),
+        _ => (), // _ 패턴은 모든 값에 일치함
+    }
+}
+```
+
+- if let 문법은 여러 경우 중 한 가지만 처리하고 나머지는 고려하고 싶지 않을 때 사용한다
+- 또한 if let 문법은 if let ~ else 표현식으로도 사용할 수 있다
+
+```rust
+fn iflet() {
+    let some_u8_value = Some(0u8);
+    if let Some(3) = some_u8_value {
+        println!("three!");
+    } else {
+        println!("not three...");
+    }
+}
+```
+
+</div>
+</details>
