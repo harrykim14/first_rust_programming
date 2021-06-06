@@ -1009,3 +1009,23 @@ use std::collections::*;
 
 </div>
 </details>
+
+### Chapter 8. 범용 컬렉션
+
+<details>
+<summary>열기</summary>
+<div markdown="8">
+
+- 러스트의 표준 라이브러리는 여러 종류의 컬렉션을 포함하고 있다
+- 그 중에 **벡터**, **문자열**, **해시 맵**이 대표적인 컬렉션
+
+**8.1. 벡터**
+
+- 벡터 생성하기
+
+```rust
+let v: Vec<i32> = Vec::new();
+```
+
+</div>
+</details>
