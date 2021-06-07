@@ -7,7 +7,7 @@ fn main() {
 
 fn vector_example() {
     // Vec<T> 타입은 어떤 타입이든 저장할 수 있다
-    let v1: Vec<i32> = Vec::new();
+    let _v1: Vec<i32> = Vec::new();
     // 값을 포함하는 벡터를 생성하는 매크로가 존재함
     let v1 = vec![1, 2, 3];
     println!("v1: [{}, {}, {}]", v1[0], v1[1], v1[2]);
@@ -67,10 +67,10 @@ fn string_example() {
     // 러스트는 언어 내에 문자열 슬라이스인 str 타입만을 지원한다
     // String 타입은 표준 라이브러리가 제공하는 타입
     // UTF-8 형식으로 인코딩된 문자열 타입을 사용하므로 어떤 언어를 쓰더라도 유효한 문자열이 된다
-    let mut s1 = String::new();
+    let mut _s1 = String::new();
     let data = "문자열 초깃값";
-    let s2 = data.to_string();
-    let s2 = "문자열 초깃값".to_string();
+    let _s2 = data.to_string();
+    let _s2 = "문자열 초깃값".to_string();
     let mut s3 = String::from("foo");
     let s4 = "bar";
     s3.push_str(s4);
@@ -129,7 +129,7 @@ fn hashmap_example() {
 
     // 해시맵에 접근하기
     let team_name = String::from("블루");
-    let score = hash_scores.get(&team_name);
+    let _score = hash_scores.get(&team_name);
 
     for (key, value) in &hash_scores {
         println!("{}, {}", key, value);
