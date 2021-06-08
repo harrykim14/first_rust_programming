@@ -1383,3 +1383,337 @@ impl Guess {
 
 </div>
 </details>
+
+### Chapter 10. 제네릭 타입, 트레이트 그리고 수명
+
+<details>
+<summary>열기</summary>
+<div markdown="10">
+
+**10.1 함수로부터 중복 제거하기**
+
+```rust
+// 하나의 리스트에서 가장 큰 숫자 찾기
+fn find_largest_number() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let mut largest = number_list[0];
+
+    for number in number_list {
+        if number > largest {
+            largest = number;
+        }
+    }
+    println!("가장 큰 수: {}", largest);
+}
+
+// 리스트를 매개변수로 받는 함수로 변경
+fn find_largest_number(list: &[i32]) -> i32 {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+```
+
+**10.2 제네릭 데이터 타입**
+
+- 제네릭은 여러 구체화된 타입을 사용할 수 있는 함수 시그너처나 구조체 같은 아이템을 정의할 때 사용함
+
+```rust
+fn largest_i32(list: &[i32]) -> i32 {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+fn largest_char(list: &[char]) -> char {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+```
+
+- 두 함수의 구성은 매개변수만 제외하곤 완전히 동일하다
+- 이 함수들을 제네릭을 사용해 하나의 함수로 변경해보자
+
+```rust
+fn largest<T>(list: &[T]) -> T {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+```
+
+- 제네릭으로 구조체 정의해서 사용하기
+
+```rust
+struct Point<T, U> {
+    x: T,
+    y: U,
+}
+
+fn main() {
+    let intPoint = Point { x: 5, y: 10 };
+    let floatPoint = Point { x: 1.0, y: 4.0 };
+    let int_and_float = Point { x: 5, y: 4.0 };
+}
+```
+
+- 구조체의 정의와는 다른 제네릭 타입을 사용하는 메서드
+
+```rust
+struct Point<T, U> {
+    x: T,
+    y: U,
+}
+
+impl<T, U> Point<T, U> {
+    fn mixup<V, W> (self, other: Point<V, W>) -> Point<T, W> {
+        Point {
+            x: self.x,
+            y: other.y,
+        }
+    }
+}
+
+fn main() {
+    let p1 = Point { x: 5, y: 10.4 };
+    let p2 = Point { x: "Hello", y: 'c' };
+
+    let p3 = p1.mixup(p2);
+    println!("p3.x = {}, p3.y = {}", p3.x, p3.y);
+    // p3.x = 5, p3.y = c
+}
+```
+
+- 러스트는 컴파일 시점에 제네릭 코드를 '단일화'하기 때문에 성능이 떨어지지 않는다
+
+**10.3 트레이트: 공유 가능한 행위를 정의하는 법**
+
+- 트레이트: 러스트 컴파일러에게 특정 타입이 어떤 기능을 실행할 수 있으며, 어떤 타입과 이 기능을 공유할 수 있는지를 알려주는 방법
+- 트레이트 선언하기: `trait` 키워드 다음에 트레이트의 이름을 지정한다
+
+```rust
+pub trait Summary {
+    fn summarize(&self) -> String;
+}
+
+pub struct NewsArticle {
+    pub headline: String,
+    pub location: String,
+    pub author: String,
+    pub content: String,
+}
+
+impl Summary for NewsArticle {
+    fn summarize(&self) -> String {
+        format!("{}, by {}, ({})", self.headline, self.author, self.location)
+    }
+}
+
+pub struct Tweet {
+    pub username: String,
+    pub content: String,
+    pub reply: bool,
+    pub retweet: bool,
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("{}: {}", self.username, self.content)
+    }
+}
+
+fn main() {
+    let tweet = Tweet {
+        username: String::from("horse_ebooks"),
+        content: String::from("Start to learn Rust"),
+        reply: false,
+        retweet: false,
+    }
+
+    println!("새 트윗 1개: {}", tweet.summarize())
+    // 새 트윗 1개: horse_ebooks: Start to learn Rust
+}
+```
+
+- 트레이트 구현에 있어 한 가지 제약은 트레이트나 트레이트를 구현할 타입이 현재 크레이트의 로컬 타입이어야 한다는 점이다
+
+- 트레이트를 이용해 여러 가지 타입을 수용하는 함수를 정의하기
+
+```rust
+// 1. 일반적인 impl 트레이트 문법
+pub fn notify(item: impl Summary) {
+    println!("속보! {}", item.summarize());
+}
+
+// 2. 트레이트 경계 문법
+pub fn notify<T: Summary>(item: T) {
+    println!("속보! {}", item.summarize());
+}
+
+// 3. + 문법으로 트레이트 경계 정의 (둘 다 같은 사용법임)
+pub fn notify(item: imple Summary + Display) {
+    println!("속보! {}", item.summarize());
+}
+pub fn notify<T: Summary + Display>(item: T) {
+    println!("속보! {}", item.summarize());
+}
+
+// 4. where절을 이용한 트레이트 경계 정의 (역시 둘 다 같은 사용법)
+fn some_function<T: Display + Clone, U: Clone + Debug>(t: T, u: U) -> i32 {}
+fn some_function<T, U>(t: T, u: U) -> i32
+    where T: Display + Clone,
+          U: Clone + Debug
+```
+
+- 트레이트를 구현하는 값 리턴하기
+
+```rust
+// 리턴 타입으로 impl Summary를 정의했기 때문에
+// 이 함수는 실제 타입 이름을 사용하지 않고도 Summary 트레이트를 구현하는 어떤 타입도 리턴할 수 있다
+// 하지만 이 문법은 하나의 타입을 리턴하는 경우에만 사용할 수 있다
+fn returns_summarizable() -> impl Summary {
+    Tweet {
+        username: String::from("horse_ebooks"),
+        content: String::from("Start to learn Rust"),
+        reply: false,
+        retweet: false,
+    }
+}
+```
+
+- 트레이트 경계를 이용해 largest 함수를 수정해보기
+
+```rust
+// 1. PartialOrd 트레이트의 경계를 지정해서 largest 함수가 실제로 비교할 수 있는 타입의 슬라이스만을 처리할 수 있게 함
+// 2. i32, char처럼 크기가 이미 정해진 타입은 스택에 저장되므로 Copy 트레이트를 추가하여 확실하게 해당 트레이트에 들어오는 값들을 정의해준다
+fn largest<T: PartialOrd + Copy>(list: &[T]) -> T {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+```
+
+**10.4 수명을 이용해 참조 유효성 검사하기**
+
+- 러스트의 모든 참조는 수명(참조가 유효한 범위)을 가지고 있다
+- 수명을 이용해 죽은 참조의 발생을 방지하기
+
+```rust
+{
+    let r;
+    {
+        let x = 5; // 'x' does not live long enough
+        r = &x;
+    }
+
+    println!("r: {}", r);
+}
+```
+
+- 러스트 컴파일러는 대여한 값이 현재 범위 내에서 유효한지 검사하는 대여 검사기를 탑재하고 있다
+- 함수의 제네릭 수명
+
+```rust
+// error[E0106]: missing lifetime specifier
+fn main() {
+    let string1 = String::from("abcd");
+    let string2 = "xyz";
+
+    let result = longest(string1.as_str(), string2);
+    println!("더 긴 문자열: {}", result);
+}
+
+fn longest(x: &str, y: &str) -> &str {
+    if x.len() > y.len() {
+        x
+    } else {
+        y
+    }
+}
+```
+
+- 함수 시그니처의 수명 애노테이션
+
+```rust
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    if x.len() > y.len() {
+        x
+    } else {
+        y
+    }
+}
+
+fn main() {
+    let string1 = String::from("아주 아주 긴 문자열");
+    {
+        let string2 = String::from("xyz");
+        let result = longest(string1.as_str(), string2.as_str());
+        println!("더 긴 문자열: {}", result);
+    }
+}
+```
+
+- 구조체 정의에서의 수명 애노테이션
+
+```rust
+struct ImportantExcerpt<'a> { // 구조체에 수명을 지정하면
+    part: &'a str, // 필드값인 part에도 수명을 지정할 수 있다
+}
+
+fn main() {
+    let novel = String::from("스타워즈. 오래 전 멀고 먼 은하계에...");
+    let first_sentence = novel.split('.') // .으로 문자열을 나눠 next()로 [0]번째 항목에 접근
+                              .next()
+                              .expect("문장에서 마침표'.'를 찾을 수 없습니다.");
+    let i = ImportantExcerpt { part: first_sentence };
+    println!("첫번째 문장: {}", i.part); // 첫번째 문장: 스타워즈
+}
+```
+
+- 현재의 러스트엔 수명 생략 규칙이 추가되어 수명을 명시적으로 지정하지 않아도 된다
+- 메서드 정의에서의 수명 애노테이션
+
+```rust
+impl<'a> ImportantExcerpt<'a> {
+    fn announce_and_return_part(&self, announcement: &str) -> &str {
+        println!("주목해주세요! {}", announcement);
+        self.part
+    }
+}
+```
+
+- 모든 문자열 리터럴의 수명은 'static이고 직접 명시할 수도 있다
+
+```rust
+let s: &'static str = "문자열은 정적 수명이다.";
+```
+
+</div>
+</details>
