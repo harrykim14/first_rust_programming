@@ -1201,3 +1201,185 @@ println!("{:?}", map); // {"wonderful": 1, "hello": 1, "world": 2}
 
 </div>
 </details>
+
+### Chapter 9. 에러 처리
+
+<details>
+<summary>열기</summary>
+<div markdown="9">
+
+- 러스트는 에러를 크게 '회복 가능한' 에러와 '회복 불가능한' 에러의 두 가지로 구분한다
+- Result<T, E>와 panic!을 통한 에러 처리가 있다
+
+**9.1 회복 불가능한 에러 처리**
+
+- 기본적으로 패닉이 발생하면 프로그램은 스택을 역순으로 순회하면서 데이터를 정리하기 때문에 프로그램이 클 수록 해야 하는 작업량은 어마어마함
+- 스택을 즉시 취소해서 애플리케이션을 종료하는 방법도 있는데 이 경우에는 운영체제가 메모리를 정리해야 한다
+
+```
+// Cargo.toml 파일 내
+[profile.release]
+panic = 'abort
+```
+
+- 패닉을 호출하는 법
+
+```rust
+painc!("crash and burn");
+```
+
+- 코드의 버그에 의해 일어나는 패닉
+- 버퍼 오버리드(buffer overread)
+
+```rust
+let v = vec![1, 2, 3];
+v[99];
+// 벡터의 100번째값은 존재하지 않으므로 패닉을 발생시킴
+```
+
+- RUST_BACKTRACE 환경변수를 이용해 패닉의 원인을 역추적 할 수 있다
+- `> RUST_BACKTRACE=1 cargo run` 처럼 RUST_BACKTRACE 환경변수에 값을 설정하여 실행하면
+
+**9.2 Result 타입을 사용해 에러 처리하기**
+
+- Result enum에는 Ok와 Err 열것값을 가지고 있는데 이를 이용해 에러를 처리할 수 있다
+
+```rust
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+- match 표현식을 이용해 리턴된 Result 타입의 리턴값을 처리할 수도 있다
+
+```rust
+use std::fs::File;
+
+fn main() {
+    let f = File::open("hello.txt");
+    // File::open() 메서드가 리턴하는 Err 열것값에 저장된 값을 타입은 io::Error 타입이다
+    let f = match f {
+        Ok(file) => file,
+        Err(error) => match error.kind() { // error.kind() 메서드는 io::ErrorKind 타입을 리턴한다
+            ErrorKind::NotFound => match File::create("hello.txt") { // ErrorKind::NotFound를 처리하고
+                Ok(fc) = fc,
+                Err(e) => painc!("파일 생성 실패: {:?}", e),
+            },
+            other_error => panic!("파일 열기 실패: {:?}", other_error); // 나머지 에러를 처리한다
+        }
+    };
+}
+```
+
+- match 표현식은 앞서 봤듯 중첩해서 사용되기 때문에 이럴 때엔 unwrap 메서드가 유용하다
+- 혹은 unwrap 메서드 대신 expect 메서드를 사용하면 개발자의 의도를 더 명확하게 표현하는 동시에 패닉이 발생한 원인을 더 쉽게 추적할 수 있다
+
+```rust
+let f = File::open("hello.txt").unwrap();
+let f = File::open("hello.txt").expect("파일을 열 수 없습니다.");
+```
+
+- 에러를 함수 안에서 처리하지 않고 호출하는 코드에 에러를 리턴하여 호출자가 에러를 처리하게 할 수 있다
+
+```rust
+use std::io;
+use std::io::Read;
+use std::fs::File;
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    let f = File::open("hello.txt");
+    let mut f = match f {
+        Ok(file) => file,
+        Err(e) => return Err(e), // 여기서 생긴 에러가 호출자에게 리턴됨
+    };
+    let mut s = String::new();
+    match f.read_to_string(&mut s) {
+        Ok(_) => Ok(s),
+        Err(e) => Err(e), // 마찬가지로 여기서 생긴 에러가 호출자에게 리턴됨
+    }
+}
+```
+
+- ? 연산자를 이용하면 더 간결하게 위 코드를 구현할 수 있다
+
+```rust
+fn read_username_from_file() -> Result<String, io::Error> {
+    let mut s = String::new();
+    File::open("hello.txt")?.read_to_string(&mut s)?;
+    Ok(s);
+}
+```
+
+- fs::read_to_string() 메서드를 사용하기
+
+```rust
+use std::io;
+use std::fs;
+
+fn read_username_from_file() -> Result<String, io:Error> {
+    fs::read_to_string("hello.txt")?;
+}
+```
+
+- 하지만 이런 ? 연산자는 Result 타입을 리턴하는 함수에서만 사용할 수 있다
+
+```rust
+use std::error::Error;
+use std::fs::File;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let f = File::open("hello.txt")?;
+    Ok(())
+}
+```
+
+**9.3 패닉에 빠질 것인가? 말 것인가?**
+
+- 프로토타이핑을 할 때엔 unwrap과 expect 메서드를 사용할 것
+- 컴파일러보다 개발자가 더 많은 정보를 가진 경우엔 unwrap 메서드를 호출하자
+- 코드가 결국 잘못된 상태가 될 상황이라면 패닉을 발생시키는 것이 나쁜 선택이 아니다
+- 러스트의 타입 시스템은 유효한 값을 전달한다고 보장하기 때문에 이것을 적극적으로 활용하자
+
+```rust
+// 리팩토링 전
+loop {
+    // ...
+    let guess: i32 = match guess.trim().parse() {
+        Ok(num) => num,
+        Err(_) => continue,
+    };
+
+    if guess < 1 || guess > 100 {
+        println!("1에서 100 사이의 값을 입력해주세요.");
+        continue;
+    }
+
+    match guess.cmp(&secret_number);
+    // ...
+}
+
+// 리팩토링 후
+pub struct Guess {
+    value: i32 // i32 타입의 value 필드를 가진 구조체를 정의
+}
+
+impl Guess {
+    pub fn new(value: i32) -> Guess { // new 연관함수를 통해 1~100인지 검사하고 아니라면 panic! 매크로를 호출
+        if value < 1 || value > 100 {
+            panic!("유추한 값은 반드시 1에서 100 사이의 값이어야 합니다. 입력한 값: {}", value);
+        }
+
+        Guess {
+            value
+        }
+    }
+
+    pub fn value(&self) -> i32 {
+        self.value // 유효성 검사를 통과한다면 i32 타입의 값을 리턴한다
+    }
+}
+```
+
+</div>
+</details>
