@@ -1717,3 +1717,81 @@ let s: &'static str = "문자열은 정적 수명이다.";
 
 </div>
 </details>
+
+### Chapter 11. 자동화 테스트 작성하기
+
+<details>
+<summary>열기</summary>
+<div markdown="11">
+
+**11.1 테스트의 작성**
+
+- 러스트에는 테스트의 대상이 되는 코드가 의도된 동작을 실행하는지 확인하는 함수가 있다
+- 필요한 데이터나 상태를 설정하고, 테스트할 코드를 실행하고, 의도한 결과가 출력되는지 검증하는 순서로 실행된다
+
+- 테스트 코드와 실행
+
+```rust
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}
+```
+
+```
+Compiling adder v0.1.0 (C:\Users\HarryKim\Documents\GitHub\first-rust-project\adder)
+ Finished test [unoptimized + debuginfo] target(s) in 1.47s
+  Running unittests (target\debug\deps\adder-a2c065fd1516b9c8.exe)
+
+running 1 test
+test tests::it_works ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+- `assert!` 매크로 사용하기
+
+```rust
+#[derive(Debug)]
+pub struct Rectangle {
+    length: u32,
+    width: u32,
+}
+
+impl Rectangle {
+    fn can_hold(&self, other: &Rectangle) -> bool {
+        self.length > other.length && self.width > other.width
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn larger_can_hold_smaller() {
+        let larger = Rectangle {
+            length: 8,
+            width: 7,
+        };
+        let smaller = Rectangle {
+            length: 5,
+            width: 1,
+        };
+
+        assert!(larger.can_hold(&smaller));
+    }
+}
+```
+
+</div>
+</details>
