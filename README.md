@@ -1793,5 +1793,68 @@ mod tests {
 }
 ```
 
+- should_panic 매크로를 이용하기
+
+```rust
+pub struct Guess {
+    value: u32,
+}
+
+impl Guess {
+    pub fn new(value: u32) -> Guess {
+        if value < 1 || value > 100 {
+            panic!(
+                "반드시 1과 100 사이의 값을 사용해야 합니다. 지정된 값: {}",
+                value
+            );
+        }
+
+        Guess { value }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn greater_than_100() {
+        Guess::new(200);
+    }
+}
+```
+
+- should_panic 특성은 함수 내의 코드가 패닉이 발생해야 테스트가 성공하고 발생하지 않으면 실패하게 됨
+
+**11.2 테스트 실행 제어하기**
+
+- 테스트를 병렬이나 직렬로 실행하기
+- `cargo test -- --test-threads=1`: 테스트 바이너리가 사용할 스레드의 개수를 정밀하게 제어 가능
+- `cargo test [name]`: 특정 테스트 함수의 이름을 명령어로 전달하여 하나만 실행하거나 복수의 함수가 공통적으로 가진 일부단어를 입력하여 해당 테스트들을 실행할 수 있다
+- `cargo test -- --ignore`: `#[ignore]` 특성을 함수 위에 추가한다면 이 명령어로 테스트를 실행했을 때 해당 함수를 무시한다
+
+**11.3 테스트의 조직화**
+
+- 단위 테스트와 통합 테스트
+- `cargo new [name] --lib`으로 생성하였을 때 가장 처음 적용되는 `#[cfg(test)]` 특성은 configuration의 약자로 이후의 코드는 특정 설정 옵션이 지정되었을 때에만 포함되도록 한다
+- 테스트 함수는 비공개 함수를 가져와 실행할 수 있다
+- 러스트에서 통합 테스트는 완전히 라이브러리의 영역 바깥에서 진행된다
+  - (1) tests 디렉터리를 최상위 수준에 생성한다
+
+```rust
+// tests/integration_test.rs 파일 생성
+use adder;
+
+#[test]
+fn it_adds_two() {
+    assert_eq!(4, adder::add_two(2));
+}
+```
+
+- (2) 서브 모듈들을 tests 디렉터리의 서브 디렉터리에 작성한다면 테스트되지 않는다
+- (3) `src/lib.rs` 파일이 아닌 `src/main.rs` 파일을 가진 바이너리 크레이트라면 tests 디렉터리에선 main.rs 파일의 함수를 테스트할 수 없다
+- 러스트 프로젝트는 `src/lib.rs` 파일에 작성된 로직을 `src/main.rs`에서 직접 호출할 수 있는 것은 이 때문이다
+
 </div>
 </details>
