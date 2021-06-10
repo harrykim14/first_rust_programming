@@ -2107,3 +2107,322 @@ pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a st
 
 </div>
 </details>
+
+### Chapter 13. 함수형 언어의 기능: 반복자와 클로저
+
+<details>
+<summary>열기</summary>
+<div markdown="13">
+
+- 러스트는 이미 존재하는 언어와 기법에 많은 영향을 받았고 그 중에서도 특히 함수형 프로그래밍의 영향을 가장 많이 받았다
+- 러스트 내 함수형 스타일 문법에는 크게 클로저와 반복자가 있다
+
+**13.1 클로저: 주변 환경을 캡처하는 익명 함수**
+
+- 러스트의 클로저는 변수에 저장하거나 다른 함수에 인수로 전달하는 **익명 함수**이다
+- 클로저를 이용해 동작을 추상화 할 수 있다
+- 클로저 함수는 `|param (, param2): param type| -> retrun type { body }`와 같이 사용한다
+
+```rust
+let expensive_closure = |num: u32| -> u32 {
+        println!("시간이 오래 걸리는 계산을 수행 중...");
+        thread::sleep(Duration::from_secs(2));
+        num
+    };
+```
+
+- 제네릭 매개변수와 Fn 트레이트를 이용한 클로저 사용
+
+```rust
+struct Cacher<T>
+where
+    T: Fn(u32) -> u32,
+{
+    calculation: T,
+    value: Option<u32>,
+}
+
+impl<T> Cacher<T>
+where
+    T: Fn(u32) -> u32,
+{
+    fn new(calculation: T) -> Cacher<T> {
+        Cacher {
+            calculation,
+            value: None,
+        }
+    }
+
+    fn value(&mut self, arg: u32) -> u32 {
+        match self.value {
+            Some(v) => v,
+            None => {
+                let v = (self.calculation)(arg);
+                self.value = Some(v);
+                v
+            }
+        }
+    }
+}
+```
+
+- 명시한 구조체 Cacher로 메모이제이션 된 값을 사용하여 실행 시간을 줄이기
+- 메모이제이션을 구현한 구조체의 인스턴스는 항상 처음 호출된 매개변수의 값만을 저장한다는 한계를 가짐
+
+```rust
+fn generate_workout(intensity: u32, random_number: u32) {
+    let mut expensive_result = Cacher::new(|num| {
+        println!("시간이 오래 걸리는 계산을 수행 중...");
+        thread::sleep(Duration::from_secs(2));
+        num
+    });
+
+    if intensity < 25 {
+        println!(
+            "오늘은 {}번의 팔굽혀펴기를 하세요!",
+            expensive_result.value(intensity)
+        );
+        println!(
+            "그 다음엔 {}번의 윗몸 일으키기를 하세요!",
+            expensive_result.value(intensity)
+        )
+    } else {
+        if random_number == 3 {
+            println!("오늘은 수분을 충분히 섭취하며 쉬세요...");
+        } else {
+            println!(
+                "오늘은 {}분간 달리기를 하세요!",
+                expensive_result.value(intensity)
+            );
+        }
+    }
+}
+```
+
+- FnOnce 트레이트는 같은 범위에 선언된 변수를 사용할 수 있다
+- 이 범위를 클로저의 환경이라고 하며 클로저는 캡쳐된 변수를 사용하려면 이 변수들의 소유권을 가져야 한다
+- 클로저를 선언하는 시점에 변수의 소유권은 클로저 안으로 이동한다
+- Once라는 이름에서 알 수 있듯 이 트레이트는 소유권을 단 한 번만 갖는다
+- FnMut 트레이트는 값을 가변으로 대여하므로 환경에서 가져온 값을 변경할 수 있다
+- Fn 트레이트는 환경에서 값을 불변으로 대여한다
+
+**13.2 반복자를 이용해 일련의 아이템 처리하기**
+
+- 러스트에서 반복자는 지연 특성이 있어 반복자를 실제로 사용하는 메서드를 호출하기 전까지는 아무런 일도 일어나지 않는다
+
+```rust
+let v1 = vec![1, 2, 3];
+let v1_iter = v1.iter();
+
+for val in v1_iter {
+    println!("값: {}", val);
+}
+```
+
+- 표준 라이브러리에 정의된 Iterator 트레이트
+
+```rust
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+    //...
+}
+```
+
+- 반복자의 next 메서드 호출
+
+```rust
+fn iterator_demonstration() {
+    let v1 = vec![1, 2, 3];
+    let mut v1_iter = v1.iter();
+
+    assert_eq!(v1_iter.next(), Some(&1));
+    assert_eq!(v1_iter.next(), Some(&2));
+    assert_eq!(v1_iter.next(), Some(&3));
+    assert_eq!(v1_iter.next(), None);
+}
+```
+
+- Iterator 트레이트는 표준 라이브러리가 제공하는 기본 구현과는 다른 여러 메서드를 제공한다
+- 일부 메서드는 next 메서드를 호출하므로 Iterator 트레이트를 구현하려면 next 메서드를 반드시 구현해야 한다
+- next 메서드를 호출하는 메서드는 내부적으로 반복자를 소비하기 때문에 **소비 어댑터**라고 부르기도 한다
+
+```rust
+#[test]
+fn iterator_sum() {
+    let v1: Vec<i32> = vec![1, 2, 3];
+    let v1_iter = v1.iter().map(|x| x + 1);
+}
+
+#[test]
+fn iterator_sum() {
+    let v1: Vec<i32> = vec![1, 2, 3];
+    // map 메서드로 새로운 반복자를 생성하여 collect 메서드로 벡터를 생성
+    let v2: Vec<_> = v1.iter().map(|x| x + 1).collect();
+
+    assert_eq!(v2, vec![2, 3, 4]);
+}
+```
+
+- filter 반복자 어댑터를 이용한 환경을 캡처하는 클로저 생성
+
+```rust
+#[derive(PartialEq, Debug)]
+struct Shoe {
+    size: u32,
+    style: String,
+}
+
+// shoe_size 변수를 캡처하는 클로저를 filter로 넘겨 Shoe 구조체 인스턴스 컬렉션을 순회하기
+// 1. 이 함수는 shoes 변수에 저장된 벡터와 shoe_size 매개변수의 소유권을 가짐
+fn shoes_in_my_size(shoes: Vec<Shoe>, shoe_size: u32) -> Vec<Shoe> {
+    // 2. into_iter 메서드를 이용해 벡터의 소유권이 있는 반복자를 생성
+    // 3. filter 메서드를 호출해 클로저가 true를 리턴한 항목만을 가지는 새로운 반복자를 생성해 리턴한다
+    // 4. collect 메서드를 호출하면 반복자 어댑터가 리턴한 반복자를 벡터에 저장해서 리턴한다(Vec<Shoe>)
+    shoes.into_iter().filter(|s| s.size == shoe_size).collect()
+}
+
+#[test]
+fn filters_by_size() {
+    let shoes = vec![
+        Shoe { size: 10, style: String::from("스니커즈"), },
+        Shoe { size: 13, style: String::from("샌달"), },
+        Shoe { size: 10, style: String::from("부츠"), },
+    ];
+
+    let in_my_size = shoes_in_my_size(shoes, 10);
+
+    assert_eq!(
+        in_my_size,
+        vec![
+            Shoe { size: 10, style: String::from("스니커즈") },
+            Shoe { size: 10, style: String::from("부츠") },
+        ]
+    )
+}
+```
+
+- Iterator 트레이트를 이용해 직접 반복자를 구현하기
+
+```rust
+// 1. Counter 구조체를 선언하고 count 필드에 0을 초깃값으로 대입해 새 인스턴스를 생성하는 new 함수를 구현
+struct Counter {
+    count: u32,
+}
+
+impl Counter {
+    fn new() -> Counter {
+        Counter { count: 0 }
+    }
+}
+
+// 2. Counter 구조체에 Iterator 트레이트를 구현하기
+impl Iterator for Counter {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.count += 1;
+
+        if self.count < 6 {
+            Some(self.count)
+        } else {
+            None
+        }
+    }
+}
+
+// 3. next() 메서드 구현 테스트
+#[test]
+fn calling_next_directly() {
+    let mut counter = Counter::new();
+
+    assert_eq!(counter.next(), Some(1));
+    assert_eq!(counter.next(), Some(2));
+    assert_eq!(counter.next(), Some(3));
+    assert_eq!(counter.next(), Some(4));
+    assert_eq!(counter.next(), Some(5));
+    assert_eq!(counter.next(), None);
+}
+
+// 4. Iterator 트레이트가 지원하는 다른 메서드 활용해보기
+#[test]
+fn using_other_iterator_trait_methods() {
+    let sum: u32 = Counter::new()
+        .zip(Counter::new().skip(1))
+        // map이나 filter와 같은 메서드는 클로저 구문이 들어가야 함
+        .map(|(a, b)| a * b)
+        .filter(|x| x % 3 == 0)
+        .sum();
+    assert_eq!(18, sum);
+}
+```
+
+**13.3 입출력 프로젝트의 개선**
+
+- 반복자를 이용해 clone 메서드 호출 제거하기
+
+```rust
+// src/main.rs
+fn main() {
+    // let args: Vec<String> = env::args().collect();
+    // println!("{:?}", args);
+
+    // env::args() 값을 Config::new() 함수에 그대로 전달
+    let config = Config::new(env::args()).unwrap_or_else(|err| {
+        println!("인수를 구문분석하는 동안 오류가 발생했습니다: {}", err);
+        process::exit(1);
+    });
+
+    // ...
+}
+
+// src/lib.rs
+impl Config {
+    // 따라서 이 부분도 변경되어야 함
+    pub fn new(mut args: std::env::Args) -> Result<Config, &'static str> {
+        args.next();
+
+        // next() 함수를 사용하여 반복자를 순회하며 입력받은 변수를 각각 대입
+        let query = match args.nexT() {
+            Some(arg) => arg,
+            None => return Err("검색어를 지정해야 합니다."),
+        }
+        let filename = match args.next() {
+            Some(arg) => arg,
+            None => return Err("파일명을 지정해야 합니다."),
+        }
+        let case_sensitive = env::var("CASE_INSENSITIVE").is_err();
+
+        Ok(Config {
+            query,
+            filename,
+            case_sensitive,
+        })
+    }
+}
+```
+
+- 반복자 어댑터를 이용해 리팩토링하기
+
+```rust
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    /*
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line);
+        }
+    }
+    results
+    */
+    contents.lines()
+            .filter(|line| line.contains(query))
+            .collection()
+}
+```
+
+- 루프와 반복자의 성능을 비교하자면 반복자를 이용한 구현이 약간 더 빠르다
+- 반복자는 러스트의 **무비용 추상화** 기능 중 하나로 추상화를 사용한다고 해서 추가적인 런타임 오버헤드가 발생하지 않는다
+
+</div>
+</details>
