@@ -1858,3 +1858,252 @@ fn it_adds_two() {
 
 </div>
 </details>
+
+### Chapter 12. I/O 프로젝트: 명령줄 프로그램 작성하기
+
+<details>
+<summary>열기</summary>
+<div markdown="12">
+
+- grep(globally search a regular expression and print)는 전통적인 명령줄 도구로 텍스트 검색 도구이다
+- grep은 **코드의 구조**, **벡터와 문자열의 활용**, **에러 처리**, **트레이트와 수명의 적절한 활용**, **테스트 코드 작성**을 아우르는 프로젝트
+
+**12.1 명령줄 인수 처리하기**
+
+```cmd
+> cargo new --bin minigrep
+```
+
+- 명령줄 인수를 읽기 위해 러스트의 표준 라이브러리 std::env::args 함수를 사용
+
+```rust
+use std::env;
+
+fn main() {
+    let args: Vec<String> = env::args().collect(); // 명령줄을 읽고 벡터로 변환함
+    println!("{:?}", args);
+
+    let query = &args[1];
+    let filename = &args[2];
+
+    println!("검색어: {}", query);
+    println!("대상 파일: {}", filename);
+}
+```
+
+**12.2 파일 읽기**
+
+- 파일 읽기를 위해 `std::fs` 라이브러리 사용
+- 현재는 fs 모듈이 분리되었으며 다른 방식으로 사용해야 함 ([번역 페이지](https://rinthel.github.io/rust-lang-book-ko/ch12-02-reading-a-file.html))
+- 파일을 읽고 쓰는데 필요한 `std::fs::File` 모듈과 파일 I/O를 포함한 I/O 작업을 위해 유용한 `use std::io::prelude::*` 를 사용해야 함
+
+```rust
+use std::fs::File;
+use std::io::prelude::*;
+
+fn main() {
+    // ...생략
+    let mut file = File::open(filename).expect("파일을 읽지 못했습니다.");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("파일을 읽는 도중 에러가 발생했습니다.");
+
+    println!("파일 내용:\n{}", contents);
+}
+```
+
+**12.3 모듈화와 에러 처리 향상을 위한 리팩토링**
+
+- 프로그램 개선을 위해 몇 가지 문제를 수정하기
+  (1) main 함수가 하나 이상의 작업을 수행하고 있음
+  (2) 설정 변수는 하나의 구조체에 모아서 목적을 명확하게 할 것
+  (3) 파일을 읽지 못했을 때의 에러 처리를 더 명확하게 제시할 것
+  (4) 다른 종류의 에러 처리를 위해 expect를 남발하지 않기 (에러 처리 로직을 한 곳으로 모으기)
+
+```rust
+// 1. 인수 구문 정리하기
+fn parse_config(args: &[String]) -> Config {
+    let query = args[1].clone();
+    let filename = args[2].clone();
+
+    Config { query, filename }
+}
+
+// 2. 설정 변수를 하나의 구조체에 모아 목적을 명확히 할 것
+struct Config {
+    query: String,
+    filename: String,
+}
+```
+
+- parse_config 함수를 Config 구조체의 연관 함수로 리팩토링
+
+```rust
+impl Config {
+    fn new(args: &[String]) -> Config {
+        let query = args[1].clone();
+        let filename = args[2].clone();
+        Config { query, filename }
+    }
+}
+```
+
+- 에러 처리 개선하기
+
+```rust
+// 1. 분기 처리로 패닉 발생시키기
+impl Config {
+    fn new(args: &[String]) -> Config {
+        if args.len() < 3 {
+            panic!("필요한 인수가 지정되지 않았습니다.");
+        }
+        // ...
+    }
+}
+
+// 2. 해당 구문을 Result를 사용하도록 변경
+impl Config {
+    fn new(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 3 {
+            return Err("필요한 인수가 지정되지 않았습니다.");
+        }
+
+        let query = args[1].clone();
+        let filename = args[2].clone();
+        Ok(Config { query, filename })
+    }
+}
+```
+
+- 설정이나 에러 처리에 관련된 부분이 아닌 나머지 코드를 분리
+
+```rust
+// 1. main 함수에서 run 함수를 분리
+fn run(config: Config) {
+    let mut file = File::open(config.filename).expect("파일을 읽지 못했습니다.");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("파일을 읽는 도중 에러가 발생했습니다.");
+
+    println!("파일 내용:\n{}", contents);
+}
+
+```
+
+- run 함수 내에서 에러 리턴하기
+
+```rust
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    // expect() 함수를 ? 연산자로 대체하기
+    let mut file = File::open(config.filename)?;
+    let mut contents = String::new();
+    // ? 연산자에 걸린 에러는 Box<dyn Error>로 처리되고 Err(e)의 인수로 전달됨
+    file.read_to_string(&mut contents)?;
+
+    println!("파일 내용:\n{}", contents);
+
+    Ok(())
+}
+```
+
+- lib.rs로 모듈 분리하기
+
+```rust
+// src/lib.rs
+use std::error::Error;
+use std::fs::File;
+use std::io::prelude::*;
+
+pub struct Config { /*...*/ }
+impl Config { /*...*/ }
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> { /*...*/ }
+
+// src/main.rs
+mod lib;
+
+use lib::*;
+use std::env;
+use std::process;
+
+fn main() { /*...*/ }
+```
+
+**12.4 테스트 주도 방법으로 라이브러리의 기능 개발하기**
+
+(1) 실패하는 테스트 작성하기
+
+```rust
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fase, productive.
+Pick three.";
+
+        assert_eq!(
+            vec!["safe, fase, productive."],
+            search(query, contents)
+        );
+    }
+}
+
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    vec![]
+}
+```
+
+(2) 테스트가 성공하도록 코드 작성하기
+
+```rust
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let mut results = Vec::new();
+
+    // 열은 파일 내 여러 라인 순회
+    for line in contents.lines() {
+        // 각 줄이 검색어를 포함하는지 확인하기
+        if line.contains(query) {
+            // 검색어를 포함하는 줄 저장하기
+            results.push(line);
+        }
+    }
+    results
+}
+```
+
+**12.5 환경 변수 다루기**
+
+- 환경 변수로 사용하는 `case_sensitive`를 Config 구조체에 대소문자 구분을 위한 새로운 설정 옵션을 추가하기
+
+```rust
+pub struct Config {
+    pub query: String,
+    pub filename: String,
+    pub case_sensitive: bool,
+}
+```
+
+- `case_sensitive`가 설정되면 사용할 `search_case_insensitive` 함수를 작성하기
+
+```rust
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let query = query.to_lowercase();
+    let mut results = Vec::new();
+
+    for line in contents.lines() {
+        // to_lowercase()를 사용하여 비교하기
+        if line.to_lowercase().contains(&query) {
+            results.push(line);
+        }
+    }
+
+    results
+}
+```
+
+</div>
+</details>
