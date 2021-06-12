@@ -2426,3 +2426,78 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
 
 </div>
 </details>
+
+### Chapter 14. 카고와 crates.io
+
+<details>
+<summary>열기</summary>
+<div markdown="14">
+
+- cargo로 할 수 있는 더 많은 일들
+- 릴리즈 프로필을 이용한 빌드 커스터마이징
+
+```
+> cargo build
+> cargo build --release
+```
+
+```rust
+// Cargo.toml
+[profile.dev] // 개발 프로필의 최적화 수준
+opt-level = 0 // opt-level = 1
+
+[profile.release]
+opt-level = 3 // 기본값은 3
+```
+
+- crates.io 사이트에 크레이트 발행하기
+- 러스트의 문서 주석은 ///로 시작하며 텍스트 형식화를 위한 마크다운을 지원함
+
+- **카고 작업공간**: 바이너리 크레이트의 크기가 증가해 여러 개의 라이브러리 크레이트로 나누어야 할 때 사용한다
+- 디렉터리 구조를 통해 라이브러리를 나눌 때 사용한다
+
+```
+> cargo new adder
+> cargo new add-one --lib
+
+└ Cargo.lock
+└ Cargo.toml
+└ add-one
+    └ Cargo.lock
+    └ src
+        └ lib.rs
+└ adder
+    └ Cargo.lock
+    └ src
+        └ main.rs
+└ target
+```
+
+- Cargo.toml과 main.rs에 라이브러리 추가하기
+
+```rust
+// adder/Cargo.toml
+[dependencies]
+add-one = { path = "../add-one" }
+
+// adder/src/main.rs
+use add_one;
+```
+
+- 라이브러리 사용하기
+
+```rust
+> cargo build
+> cargo run -p adder // -p 인수를 이용해 작업 공간 내에서 실행할 패키지의 이름을 지정하기
+```
+
+- 작업공간에 외부 크레이트 의존성 추가하기
+
+```rust
+[dependenceis]
+
+rand = "0.6.5"
+```
+
+</div>
+</details>
