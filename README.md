@@ -2607,5 +2607,84 @@ impl<T> Deref for MyBox<T> {
   - `T: DerefMut<Target=U>`일 때 `&mut T`를 `&mut U`로 변환한다
   - `T: Deref<Target=U`일 때 `&mut T`를 `&U`로 변환한다
 
+**15.2 Drop 트레이트를 구현해서 메모리를 해제할 때 코드 실행하기**
+
+- Drop 트레이트는 값이 범위를 벗어날 때의 동작을 재정의한다
+- 이 트레이트는 어떤 타입에도 구현할 수 있으며 파일이나 네트워크 연결 같은 자원을 해제한느 코드를 명시할 수 있다
+- 스마트 포인터를 구현할 때 거의 항상 Drop 트레이트의 기능을 사용한다
+- 러스트의 경우 값이 범위를 벗어날 때 호출되는 코드를 직접 명시할 수도 있고 컴파일러가 자동으로 이 코드를 삽일할 수도 있다
+
+```rust
+fn main() {
+    let c = CustomSmartPointer {
+            data: String::from("첫번째 데이터"),
+        };
+    let d = CustomSmartPointer {
+            data: String::from("두번째 데이터"),
+        };
+    println!("CustomSmartPointer를 생성했습니다");
+} // 명시적으로 drop을 호출하지 않아도 이 범위를 넘어가면 호출된다
+/*
+* CustomSmartPointer를 생성했습니다
+* CustomSmartPointer의 데이터 '두번째 데이터'를 해제합니다
+* CustomSmartPointer의 데이터 '첫번째 데이터'를 해제합니다
+*/
+
+struct CustomSmartPointer {
+    data: String,
+}
+
+impl Drop for CustomSmartPointer {
+    fn drop(&mut self) {
+        println!("CustomSmartPointer의 데이터 '{}'를 해제합니다", self.data);
+    }
+}
+```
+
+- drop 함수는 main 함수의 끝에 도달하면 자동으로 호출하므로 **명시적으로 호출할 수 없다**
+- 값을 일찍 해제하려면 `std::mem::drop` 함수를 호출해야 한다
+
+```rust
+fn main() {
+    //...
+    drop(c);
+    println!("변수 c를 해제하였습니다.");
+}
+```
+
+**15.3 `Rc<T>` 참조 카운터 스마트 포인터**
+
+- 러스트는 다중 소유권을 지원하기 위해 참조 카운터의 약어를 따온 `Rc<T>`타입을 지원한다
+- `Rc<T>`타입은 프로그램의 여러 부분에서 데이터를 읽을 수 있도록 데이터를 힙 메모리에 저장할 때 사용한다
+
+```rust
+use std::rc::Rc;
+
+enum List {
+    Cons(i32, Rc<List>),
+    Nil,
+}
+
+fn main() {
+    let e = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
+    let f = Cons(3, Rc::clone(&e));
+    // Rc::clone 대신 .clone()을 사용해도 되지만 Rc::clone이 관례임
+    let g = Cons(4, Rc::clone(&e));
+```
+
+- `Rc<T>`의 복제는 참조 카운터를 증가시킨다
+
+```rust
+//...
+let e = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
+println!("e를 생성한 이후의 카운터 = {}", Rc::strong_count(&e)); // 1
+let f = Cons(3, Rc::clone(&e));
+println!("f를 생성한 이후의 카운터 = {}", Rc::strong_count(&e)); // 2
+let g = Cons(4, Rc::clone(&e));
+println!("g를 생성한 이후의 카운터 = {}", Rc::strong_count(&e)); // 3
+drop(g);
+println!("g를 드랍한 이후의 카운터 = {}", Rc::strong_count(&e)); // 2
+```
+
 </div>
 </details>
