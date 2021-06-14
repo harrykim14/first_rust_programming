@@ -2673,6 +2673,7 @@ fn main() {
 ```
 
 - `Rc<T>`의 복제는 참조 카운터를 증가시킨다
+- 참조 카운터는 `strong_count()` 함수로 호출할 수 있다
 
 ```rust
 //...
@@ -2684,6 +2685,250 @@ let g = Cons(4, Rc::clone(&e));
 println!("g를 생성한 이후의 카운터 = {}", Rc::strong_count(&e)); // 3
 drop(g);
 println!("g를 드랍한 이후의 카운터 = {}", Rc::strong_count(&e)); // 2
+```
+
+- 내부 가변성은 러스트가 데이터의 불변 참조를 이용해 데이터를 가공할 수 있도록 지원하는 디자인 패턴이다
+- 보통 data borrowed 와 같은 대여 규칙에 의해 차단되지만 이 패턴은 데이터 구조 안에 unsafe 코드를 사용해 값의 가공과 대여를 관장하는 러스트의 규칙을 우회한다
+
+**15.4 `RefCell<T>` 타입과 내부 가변성 패턴**
+
+```rust
+/*
+* `RefCell<T>` 타입을 이용해 런타임에 대여 규칙 강제하기
+* Box<T> 타입의 경우 대여 규칙의 불변성질은 컴파일타임에 평가된다
+* RefCell<T> 타입은 런타임에 적용된다
+* 대부분의 대여 규칙을 컴파일 타임에 확인하는 것이 러스트로서는 최선
+* 대여 규칙을 런타임에 검사하게 되면 메모리 안정성과 관련된 작업을 수행할 수 있다
+* Rc<T>와 마찬가지로 RefCell<T> 또한 단일 스레드 환경에서만 사용해야 한다
+* Rc<T>는 같은 데이터에 대한 다중 소유권을 지원하지만 Box<T>와 RefCell<T> 타입은 단일 소유권만 지원한다
+*/
+
+// 컴파일 되지 않는 코드
+fn main() {
+    let x = 5;
+    let y = &mut x; // [error]: cannot borrow mutably
+}
+
+// 내부 가변성의 활용 예: 모조 객체
+pub trait Messenger {
+    // self의 불변참조와 전달할 텍스트를 매개변수로 선언하고 있다
+    fn send(&self , msg: &str);
+}
+
+pub struct LimitTracker<'a, T: 'a + Messenger> {
+    messenger: &'a T,
+    value: usize,
+    max: usize,
+}
+
+impl<'a, T> LimitTracker<'a, T>
+    where T: Messenger {
+        pub fn new(messenger: &T, max: usize) -> LimitTracker<T> {
+            LimitTracker {
+                messenger,
+                value: 0,
+                max,
+            }
+        }
+
+        // 이 set_value 메서드는 아무것도 리턴하지 않음
+        pub fn set_value(&mut self, value: usize) {
+            self.value = value;
+
+            let percentage_of_max = self.value as f64 / self.max as f64;
+
+            if percentage_of_max >= 0.75 && percentage_of_max < 0.9 {
+                self.messenger.send("경고: 최댓값의 75%를 사용했습니다.");
+            } else if percentage_of_max >= 0.9 && percentage_of_max < 1 {
+                self.messenger.send("긴급 경고: 최댓값의 90%를 사용했습니다.");
+            } else if percentage_of_max >= 1.0 {
+                self.messenger.send("에러: 최대값을 초과했습니다.");
+            }
+        }
+    }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    struct MockMessenger {
+        sent_messages: RefCell<Vec<String>>,
+    }
+
+    impl MockMessenger {
+        fn new() -> MockMessenger {
+            MockMessenger {
+                sent_messages: RefCell::new(vec![]),
+            }
+        }
+    }
+
+    impl Messenger for MockMessenger {
+        // `self` is a `&` reference, so the data it refers to cannot be borrowed as mutable
+        fn send(&self, message: &str) {
+            // self.sent_messages.push(String::from(message));
+            // borrow_mut() 메서드를 사용하기
+            self.sent_messages.borrow_mut().push(String::from(message));
+        }
+    }
+
+    #[test]
+    fn it_sends_an_over_75_percent_warning_message() {
+        let mock_messenger = MockMessenger::new();
+        let mut limit_tracker = LimitTracker::new(&mock_messenger, 100);
+        limit_tracker.set_value(80);
+        assert_eq!(mock_messenger.sent_messages.borrow().len(), 1);
+    }
+}
+```
+
+- `Rc<T>`와 `RefCell<T>`를 조합하면 가변 데이터에 다중 소유권을 적용할 수 있다
+
+```rust
+use crate::List::{Cons, Nil};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+#[derive(Debug)]
+enum List {
+    Cons(Rc<RefCell<i32>>, Rc<List>),
+    Nil,
+}
+
+fn main() {
+    let value = Rc::new(RefCell::new(5));
+    let a = Rc::new(Cons(Rc::clone(&value), Rc::new(Nil)));
+    let b = Cons(Rc::new(RefCell::new(6)), Rc::clone(&a));
+    let c = Cons(Rc::new(RefCell::new(10)), Rc::clone(&a));
+
+    *value.borrow_mut() += 10;
+
+    println!("a 수정 후 = {:?}", a);
+    // a 수정 후 = Cons(RefCell { value: 15 }, Nil)
+    println!("b 수정 후 = {:?}", b);
+    // b 수정 후 = Cons(RefCell { value: 6 }, Cons(RefCell { value: 15 }, Nil))
+    println!("c 수정 후 = {:?}", c);
+    // c 수정 후 = Cons(RefCell { value: 10 }, Cons(RefCell { value: 15 }, Nil))
+}
+```
+
+**15.5 메모리 누수의 원인이 되는 순환 참조**
+
+- 러스트에서는 메모리 누수도 메모리 안전성의 일부
+- 참조하는 Cons 열것값을 변경할 수 있도록 `RefCell<T>` 타입을 저장하는 콘스 리스트
+
+```rust
+use std::rc::Rc;
+use std::cell::RefCell;
+use List::{Cons, Nil};
+
+#[derive(Debug)]
+enum List {
+    Cons(i32, RefCell<Rc<List>>),
+    Nil
+}
+
+impl List {
+    // 두 번째 원소에 쉽게 접근하기 위한 메서드
+    fn tail(&self) -> Option<&RefCell<Rc<List>>> {
+        match *self {
+            Cons(_, ref item) => Some(item),
+            Nil => None,
+        }
+    }
+}
+
+fn main() {
+    let a = Rc::new(Cons(5, RefCell::new(Rc::new(Nil))));
+    println!("a의 최초 rc 카운트 = {}", Rc::strong_count(&a));
+    // a의 최초 rc 카운트 = 1
+    println!("a의 다음 아이템 = {:?}", a.tail());
+    // a의 다음 아이템 = Some(RefCell { value: Nil })
+
+    let b = Rc::new(Cons(5, RefCell::new(Rc::clone(&a))));
+    println!("b를 생성한 후 a의 rc 카운트 = {}", Rc::strong_count(&a));
+    // b를 생성한 후 a의 rc 카운트 =
+    println!("b의 최초 rc 카운트 = {}", Rc::strong_count(&b));
+    // b의 최초 rc 카운트 = 1
+    println!("b의 다음 아이템 = {:?}", b.tail());
+    // b의 다음 아이템 = Some(RefCell { value: Cons(5, RefCell { value: Nil }) })
+
+    if let Some(link) = a.tail() {
+        *link.borrow_mut() = Rc::clone(&b);
+    }
+
+    println!("a를 변경한 후 b의 rc 카운트 = {}", Rc::strong_count(&b));
+    // a를 변경한 후 b의 rc 카운트 = 2
+    println!("a를 변경한 후 a의 rc 카운트 = {}", Rc::strong_count(&a));
+    // a를 변경한 후 a의 rc 카운트 = 2
+}
+```
+
+- 순환 참조를 방지하기 위해 `Rc<T>` 대신 `Week<T>`를 활용할 수 있다
+- `Rc::clone` 메서드는 `Rc<T>` 인스턴스의 `strong_count` 값을 증가시키며, `Rc<T>` 타입은 `strong_count` 값이 0인 인스턴스만 해제한다
+- `Rc::downgrade` 메서드에 `Rc<T>` 참조를 전달해 `Rc<T>`에 저장된 값에 대한 약한 참조를 생성할 수도 있다
+
+```rust
+use std::rc::Rc;
+use std::cell:RefCell;
+
+// 자식 노드를 갖는 노드로 구성된 트리 데이터 구조
+#[derive(Debug)]
+struct Node {
+    value: i32,
+    // 자식 노드가 부모 노드를 인식하도록 하려면 parent 필드를 추가하기
+    parent: RefCell<Weak<Node>>,
+    children: RefCell<Vec<Rc<Node>>>,
+}
+
+fn main() {
+    let leaf = Rc::new(Node {
+        value: 3,
+        parent: RefCell::new(Weak::new()),
+        children: RefCell::new(vec![]),
+    });
+
+    println!(
+        "leaf strong = {}, weak = {}",
+        Rc::strong_count(&leaf),
+        Rc::weak_count(&leaf)
+    ); // 1. leaf 인스턴스를 생성한 직후: leaf strong = 1, weak = 0
+
+    // println!("leaf parent = {:?}", leaf.parent.borrow().upgrade());
+    // leaf parent = None
+
+    {
+        // 2. leaf 자식 노드를 갖는 branch 인스턴스 생성
+        let branch = Rc::new(Node {
+            value: 5,
+            parent: RefCell::new(Weak::new()),
+            children: RefCell::new(vec![Rc::clone(&leaf)]),
+        });
+
+        *leaf.parent.borrow_mut() = Rc::downgrade(&branch);
+
+        println!(
+            "branch strong = {}, weak = {}",
+            Rc::strong_count(&leaf),
+            Rc::weak_count(&leaf)
+        );
+
+        println!(
+            "leaf strong = {}, weak = {}",
+            Rc::strong_count(&leaf),
+            Rc::weak_count(&leaf)
+        );
+    }
+
+    println!("leaf parent = {:?}", leaf.parent.borrow().upgrade());
+
+    println!(
+        "leaf strong = {}, weak = {}",
+        Rc::strong_count(&leaf),
+        Rc::weak_count(&leaf)
+    );
+}
 ```
 
 </div>
