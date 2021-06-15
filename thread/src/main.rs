@@ -1,9 +1,11 @@
-use std::sync::mpsc;
+// use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+// use std::time::Duration;
+// use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 fn main() {
-    /*
+    /* 1. 스레드의 기본
     let v = vec![1, 2, 3];
     let handle = thread::spawn(move || {
         for i in 1..10 {
@@ -19,6 +21,7 @@ fn main() {
     handle.join().unwrap();
     */
 
+    /* 2. 채널 관련 코드
     let (tx, rx) = mpsc::channel();
 
     let tx1 = mpsc::Sender::clone(&tx);
@@ -58,4 +61,24 @@ fn main() {
     for received in rx {
         println!("수신: {}", received);
     }
+    */
+    /* 3. Mutex */
+    let counter = Arc::new(Mutex::new(0));
+    // Rc<T> 타입으로는 동시성을 해결할 수 없어 Arc<T> 타입을 사용한다
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let counter = Arc::clone(&counter);
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap();
+
+            *num += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    println!("결과: {}", *counter.lock().unwrap());
 }

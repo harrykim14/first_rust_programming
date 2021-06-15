@@ -3131,5 +3131,61 @@ for received in rx {
 // ...
 ```
 
+**16.2 공유 상태 동시성**
+
+- 대부분 프로그래밍 언어에서 채널은 단일 소유권을 의미한다
+- 러스트에서는 스마트 포인터를 이용하면 다중 소유권을 적용할 수 있다
+- 특정 시점에 한 스레드만 데이터에 접근하도록 허용하려면 뮤텍스를 사용해야 한다
+- 뮤텍스는 데이터를 사용하기 전에 반드시 락을 획득해야 하며, 뮤텍스가 보호하는 데이터르 사용한 후에는 다른 스레드가 락을 얻을 수 있도록 데이터를 언락해야 한다
+
+```rust
+use std::sync::Mutex;
+
+fn main() {
+    let m = Mutex::new(5);
+
+    {
+        let mut num = m.lock().unwrap();
+        *num = 6;
+    }
+
+    println!("m = {:?}", m);
+}
+```
+
+- 다중 스레드 간에 `Mutex<T>`를 공유하려면 해당 타입의 다중 소유권을 해결해야 하며 러스트에서는 `Arc<T>` 타입을 사용할 수 있다
+
+```rust
+use std::thread;
+use std::sync::{Arc, Mutex};
+
+fn main() {
+    let counter = Arc::new(Mutex::new(0));
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let counter = Arc::clone(&counter);
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap();
+
+            *num += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    println!("결과: {}", *counter.lock().unwrap());
+}
+```
+
+**16.3 Sync와 Send 트레이트로 동시성 확장하기**
+
+- 러스트에서는 `std::marker` 트레이트의 Sync와 Send 트레이트를 사용하면 동시성 구현할 수 있다
+- Send 트레이트는 이 트레이트를 구현하는 타입의 소유권이 다른 스레드로 이전될 수 있음을 표시하는 **마커**이다
+- `Rc<T>`를 복제해서 다른 스레드로 소유권을 이전하면 참조 카운터를 동시에 변경할 수 있기 때문에 이를 사용할 수는 없다
+- `Sync` 마커 트레이트는 여러 스레드가 타입을 안전하게 참조할 수 있음을 표시하기 위한 트레이트로 타입 T가 Sync 트레이트를 구현하고 있으며 &T가 Send 트레이트를 구현하고 있다면 이 참조는 다른 스레드로 안전하게 전달할 수 있다
+
 </div>
 </details>
