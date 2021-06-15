@@ -2933,3 +2933,203 @@ fn main() {
 
 </div>
 </details>
+
+### Chapter 16. 자신 있는 동시성
+
+<details>
+<summary>열기</summary>
+<div markdown="16">
+
+**16.1 코드를 동시에 실행하기 위한 스레드**
+
+- 프로그램의 연산을 여러 개의 스레드로 분리하면 프로그램이 여러 작업을 한번에 실행할 수 있어 성능을 향상시킬 수 있지만 복잡도 역시 증가한다
+- 스레드는 동시에 실행되므로 본질적으로 다른 스레드에서 실행되는 코드의 순서를 보장할 수 없다
+- 그렇기 때문에 **경합상태**(일정하지 않은 순서로 데이터나 자원에 접근하는 상황)이나 **데드락**(두 스레드가 모두 서로가 자원의 사용을 마칠때까지 대기해서 두 스레드 모두 대기 상태에 놓이는 상황)이 일어날 수 있다
+- 프로그래밍 언어가 제공하는 스레드는 M:N 모델의 그린 스레드이며 러스트는 저수준의 언어이기 때문에 러스트의 표준 라이브러리는 1:1 스레드 구현만을 지원한다
+- 새 스레드를 생성하는 것은 `thread::spawn` 함수를 호출하고 새 스레드에서 실행하기를 원하는 코드를 담고 있는 클로저를 전달하면 된다
+
+```rust
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    thread::spawn(||{
+        for i in 1..10 {
+            println!("새 스레드: {}", i);
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
+    for i in 1..5 {
+        println!("주 스레드: {}", i);
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+/*
+주 스레드: 1
+새 스레드: 1
+새 스레드: 2
+주 스레드: 2
+주 스레드: 3
+새 스레드: 3
+새 스레드: 4
+주 스레드: 4
+새 스레드: 5
+*/
+```
+
+- `join`메서드를 사용한다면 `thread::spawn` 함수가 리턴한 값을 변수에 저장해야 한다
+- `thread::spawn` 함수는 `JoinHandle` 타입을 리턴하고 `join` 메서드를 호출하면 그 스레드가 종료될 때 까지 기다린다
+
+```rust
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    let handle = thread::spawn(|| {
+        for i in 1..10 {
+            println!("새 스레드: {}", i);
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
+    for i in 1..5 {
+        println!("주 스레드: {}", i);
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    handle.join().unwrap();
+}
+/*
+주 스레드: 1
+새 스레드: 1
+새 스레드: 2
+주 스레드: 2
+새 스레드: 3
+주 스레드: 3
+주 스레드: 4
+새 스레드: 4
+새 스레드: 5
+새 스레드: 6
+새 스레드: 7
+새 스레드: 8
+새 스레드: 9
+*/
+```
+
+- `move` 클로저는 한 스레드의 데이터를 다른 스레드에서 사용할 수 있게 한다
+- `thread::spawn` 함수에 전달한 클로저는 매개변수가 없다
+- 자식 스레드의 코드는 주 스레드의 데이터를 전혀 활용하지 않는다
+- 주 스레드의 데이터를 사용하려면 자식 스레드의 클로저가 그 값을 캡처해야 한다
+- 클로저 앞에 `move` 키워드를 추가하면 클로저가 필요로 하는 값을 대여하려는 러스트의 동작을 변경해 클로저 값의 소유권을 가질 수 있다
+
+```rust
+fn main() {
+    let v = vec![1, 2, 3];
+    let handle = thread::spawn(move || {
+                println!("벡터: {:?}", v);
+    });
+    handle.join().unwrap();
+}
+```
+
+- 동시성의 안정을 보장하려는 방법 중에는 **메시지 전달**이 빠르게 대중화되고 있다
+- 러스트가 가진 도구 중 메시지 전달 동시성을 구현하기 위한 것은 **채널**이다
+- 채널은 **전달자**와 **수신자**로 구성된다 전달자는 상류에 해당하고 수신자가 하류에 해당한다
+- 채널은 전달자나 수신자가 해제되면 함께 닫힌다
+
+```rust
+use std::thread;
+use std::sync::mpsc;
+
+fn main() {
+    // mpsc::channel()은 (Sender<T>, Receiver<T>) 튜플을 리턴함
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let val = String::from("안녕하세요");
+        tx.send(val).unwrap();
+    });
+
+    //
+    let received = rx.recv().unwrap();
+    println!("수신: {}", received);
+    // 수신: 안녕하세요
+}
+```
+
+- 안전한 동시성 코드의 작성을 돕기 위해 소유권 규칙은 메시지 전송에 중요한 역할을 한다
+
+```rust
+use std::thread;
+use std::sync::mpsc;
+use std::time::Duration;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let vals = vec![
+            String::from("자식 스레드가"),
+            String::from("안녕하세요"),
+            String::from("라고"),
+            String::from("인사를 합니다"),
+        ];
+
+        for val in vals {
+            tx.send(val).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    for received in rx {
+        println!("수신: {}", received);
+    }
+}
+```
+
+- 스레드를 생성하기 전 `mpsc::Sender::clone()` 메서드를 통해 채널의 전달자를 복제해 놓으면 두 개의 스레드에 각기 다른 메세지를 채널의 수신자에게 전송할 수 있다
+
+```rust
+// ...
+let (tx, rx) = mpsc::channel();
+
+let tx1 = mpsc::Sender::clone(&tx); // 전달자를 복제
+
+thread::spawn(move || {
+    let vals = vec![
+        String::from("자식 스레드가"),
+        String::from("안녕하세요"),
+        String::from("라고"),
+        String::from("인사를 합니다"),
+    ];
+
+    for val in vals {
+        tx1.send(val).unwrap();
+        thread::sleep(Duration::from_secs(1));
+    }
+});
+
+thread::spawn(move || {
+    let vals = vec![
+        String::from("그리고"),
+        String::from("더 많은"),
+        String::from("메시지를"),
+        String::from("보냅니다."),
+    ];
+
+    for val in vals {
+        tx.send(val).unwrap();
+        thread::sleep(Duration::from_secs(1));
+    }
+});
+
+for received in rx {
+    println!("수신: {}", received);
+}
+
+// ...
+```
+
+</div>
+</details>
