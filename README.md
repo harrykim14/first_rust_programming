@@ -3189,3 +3189,156 @@ fn main() {
 
 </div>
 </details>
+
+### Chapter 17. 러스트의 객체지향 프로그래밍 기능
+
+<details>
+<summary>열기</summary>
+<div markdown="17">
+
+- 객체지향 언어의 특징: 데이터와 행위를 정의하는 객체, 상세 구현을 숨기는 캡슐화, 타입 시스템으로서의 상속과 코드 공유를 위한 상속 등
+- 러스트에서는 다른 언어의 객체와 구분하고자 구조체와 열거자를 '객체'로 부르지 않는다
+- 트레이트 객체는 데이터와 행위가 결합하므로 다른 언어에서 말하는 객체와 유사하다
+- 단, 트레이트 객체가 전통적인 객체와 다른 점은 트레이트 객체에 데이터를 추가할 수 없다는 점이다
+- 트레이트 객체의 목적은 **공통된 행위에 대한 추상화를 제공하는 것**
+- 러스트는 트레이트 객체를 사용할 때 반드시 동적 호출을 사용한다
+- 트레이트 객체는 객체 안정성을 가진 트레이트만 사용할 수 있다
+- 트레이트에 선언된 모든 메서드의 리턴 타입이 Self가 아니며 제네릭 타입의 매개변수가 없을 때 객체 안정성을 확보했다고 할 수 있다
+
+**객체지향 디자인 패턴 구현**
+
+- 동작을 구현하기
+
+```rust
+mod blog;
+use blog::Post;
+
+fn main() {
+     // 1) 블로그의 새 초고를 작성하기
+    let mut post = Post::new();
+
+    // 2) 텍스트를 추가할 수 있는 함수를 제공
+    post.add_text("나는 오늘 점심으로 샐러드를 먹었다.");
+    assert_eq!("", post.content());
+
+    // 3) 블로그의 리뷰를 요청하기
+    post.request_review();
+    assert_eq!("", post.content());
+    // 아직 게재가 승인된 상태가 아니므로 빈 문자열을 리턴해야 한다
+
+    // 4) 포스트가 승인을 받는다면 앞서 입력했던 text와 같아야 할 것
+    post.approve();
+    assert_eq!("나는 오늘 점심으로 샐러드를 먹었다.", post.content());
+}
+```
+
+- Post 구조체와 new 함수, State 트레이트와 Draft 구조체를 정의하기
+
+```rust
+// src/blog/mod.rs
+pub struct Post {
+    state: Option<Box<dyn State>>,
+    content: String,
+}
+
+impl Post {
+    // 새 인스턴스를 생성하는 new 함수
+    pub fn new() -> Post {
+        Post {
+            state: Some(Box::new(Draft {})),
+            content: String::new(),
+        }
+    }
+
+    // 텍스트를 추가하는 add_text 메서드
+    pub fn add_text(&mut self, text: &str) {
+        self.content.push_str(text);
+    }
+
+    // content 메서드는 초고 상태일 때엔 빈 문자열을 리턴한다
+    pub fn content(&self) -> &str {
+        ""
+    }
+
+    // 리뷰를 요청하여 상태를 변경하게 하는 request_review 메서드
+    // 이 메서드가 실행되면
+    pub fn request_review(&mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.request_review());
+        }
+    }
+}
+
+
+trait State {
+    fn request_review(self: Box<Self>) -> Box<State>;
+}
+
+struct Draft {}
+
+impl State for Draft {
+    fn request_review(self: Box<Self>) -> Box<State> {
+        Box::new(PendingReview {})
+    }
+}
+
+struct PendingReview {}
+
+impl State for PendingReview {
+    fn request_review(self: Box<Self>) -> Box<State> {
+        self
+    }
+}
+```
+
+- Post 구조체와 DraftPost 구조체로 나누기
+
+```rust
+pub struct Post {
+    content: String,
+}
+
+impl Post {
+    pub fn new() -> DraftPost {
+        DraftPost {
+            content: String::new(),
+        }
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+}
+
+pub struct DraftPost {
+    content: String,
+}
+
+impl DraftPost {
+    pub fn add_text(&mut self, text: &str) {
+        self.content.push_str(text);
+    }
+
+    pub fn request_review(self) -> PendingReviewPost {
+        PendingReviewPost {
+            content: self.content,
+        }
+    }
+}
+
+pub struct PendingReviewPost {
+    content: String,
+}
+
+impl PendingReviewPost {
+    pub fn approve(self) -> Post {
+        Post {
+            content: self.content,
+        }
+    }
+}
+// ...
+```
+
+</div>
+</details>
