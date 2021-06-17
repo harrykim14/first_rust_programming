@@ -3342,3 +3342,77 @@ impl PendingReviewPost {
 
 </div>
 </details>
+
+### Chapter 18. 패턴과 매칭
+
+<details>
+<summary>열기</summary>
+<div markdown="18">
+
+- 패턴은 러스트가 간단한 타입과 복잡한 타입의 구조 모두를 매칭할 수 있는 특별한 문법
+- 패턴을 match 표현식과 더불어 다른 구조와 함께 사용하면 프로그램의 흐름을 더욱 세밀하게 제어할 수 있다
+- 패턴은 **리터럴**, **해체된 배열, 열거자, 구조체 혹은 튜플**, **변수**, **와일드카드**, **자리지정자**의 조합으로 구성된다
+
+**18.1 패턴을 활용할 수 있는 위치**
+
+- 패턴은 match 표현식의 가지에서 사용할 수 있다
+- match 표현식의 요구사항 중 하나는 match 표현식에 사용된 값에 대한 모든 가능성을 반드시 처리해야 한다는 점이다
+
+```rust
+match VALUE {
+    PATTERN => EXPRESSION,
+    PATTERN => EXPRESSION,
+    PATTERN => EXPRESSION,
+}
+```
+
+- match 표현식을 더 짧게 표현하는 용도로 `if let` 표현식을 사용할 수 있다
+
+```rust
+fn main() {
+    let favorite_color: Option<&str> = None;
+    let is_tuesday = false;
+    let age: Result<u8, _> = "32".parse();
+
+    if let Some(color) = favorite_color {
+        println!("선호하는 {}색을 배경으로 사용합니다.", color);
+    } else if is_tuesday {
+        println!("화요일엔 녹색");
+    } else if let Ok(age) = age {
+        if age > 30 {
+            println!("보라색을 배경으로");
+        } else {
+            println!("오렌지색 배경");
+        }
+    } else {
+        println!("파란색 배경");
+    }
+}
+```
+
+- `while let` 조건부 루프 또한 패턴이 일치하는 동안 루프를 실행한다
+
+```rust
+let mut stack = Vec::new();
+
+stack.push(1);
+stack.push(2);
+stack.push(3);
+
+while let Some(top) = stack.pop() {
+    println!("{}", top);
+}
+```
+
+- for 루프는 러스트의 가장 일반적인 루프의 형태이며 for 루프 또한 패턴을 적용할 수 있다
+
+```rust
+let v = vec!['a', 'b', 'c'];
+
+for (index, value) in v.iter().enumerate() {
+    println!("인덱스 {}의 값: {}", index, value);
+}
+```
+
+</div>
+</details>
