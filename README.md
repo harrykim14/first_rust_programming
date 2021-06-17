@@ -3414,5 +3414,245 @@ for (index, value) in v.iter().enumerate() {
 }
 ```
 
+- let 키워드로 튜플을 해체하여 지정할 때엔 변수의 개수가 튜플 원소의 수와 같아야 한다
+
+```rust
+let (x, y) = (1, 2) // Ok
+let (x, y) = (1, 2, 3) // Error
+```
+
+- 튜플을 해체하여 변수로서 사용하는 패턴은 함수의 매개변수일 때도 가능하다
+
+```rust
+fn print_coordinates(&(x, y): &(i32, i32)) {
+    println!("현재 위치: ({}, {})", x, y);
+}
+
+fn main() {
+    let point = (3, 5);
+    print_coordinates(&point);
+}
+```
+
+**18.2 부인 가능성: 패턴이 일치할수도, 그렇지 않을 수도 있다**
+
+- 패턴에는 **부인할 수 있는 패턴**과, **부인할 수 없는 패턴**으로 나뉜다
+
+```rust
+// let 구문에 부인할 수 있는 패턴을 적용하기 (컴파일 되지 않음)
+let some_option_value = Some(5);
+let Some(x) = some_option_value;
+
+// 부인할 수 있는 패턴을 적용하기 위해 if let 구문으로 수정
+if let Some(x) = some_option_value {
+    println!("{}", x);
+}
+
+// 부인할 수 없는 패턴을 if let 구문에서 사용 (경고가 출력됨)
+if let x = 5 {
+    println!("{}", x);
+}
+```
+
+**18.3 패턴 문법**
+
+- 패턴은 리터럴에 직접 비교할 수 있다
+
+```rust
+let x = 1;
+// 부인할 수 있는 패턴을 if let 구문에서 사용한다면
+// match는 부인할 수 없는 패턴을 사용한다
+match x {
+    1 => println!("하나"),
+    2 => println!("둘"),
+    3 => println!("셋"),
+    _ => println!("나머지"),
+}
+
+let y = Some(5);
+let z = 10;
+
+match y {
+    Some(50) => println!("50"),
+    Some(y) => println!("일치, y = {:?}", y),
+    _ => println!("불일치, zx = {:?}", z),
+}
+
+println!("결과: z = {:?}, y = {:?}", z, y);
+```
+
+- match 표현식에는 `|` 문법(or)을 이용해 여러개의 패턴을 비교할 수 있다
+- `...` 문법은 가장 자리의 값을 포함하는 값의 범위와 비교한다
+- 이 범위 문법은 숫자나 char 값만 사용할 수 있다
+- `...` 문법은 `..=` 문법으로 교체되었다 ([Rust 공식문서](https://doc.rust-lang.org/std/ops/struct.RangeInclusive.html))
+
+```rust
+let x = 1;
+
+match x {
+    1 | 2 => println!("1 또는 2"),
+    _ => println!("그 외"),
+}
+
+match x {
+    1..=5 => println!("1 ~ 5 사이 값"),
+    _ println!("그 외 나머지 값"),
+}
+
+let c = 'c';
+
+match c {
+    'a'..='j' => println!("아스키 문자의 전반부"),
+    'k'..='z' => println!("아스키 문자의 후반부"),
+    _ => println!("그 외 나머지 값"),
+}
+```
+
+- 구조체, 열거자의 해체문법과 match 문법의 혼용
+
+```rust
+// 구조체의 해체
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let p = Point { x: 0, y: 7 };
+    match p {
+        Point { x, y: 0 } => println!("x축 {}에 위치하는 점", x),
+        Point { x: 0, y } => println!("y축 {}에 위치하는 점", y),
+        Point { x, y } => println!("({}, {})에 위치하는 점", x, y),
+    }
+}
+
+// 열거자의 해체
+enum Message {
+    Quit,
+    Move { x: i32, y: i32},
+    Write(String),
+    ChangeColor(Color),
+}
+
+fn main() {
+    let msg = Message::Move { x: 160, y: 255 };
+
+    match msg {
+        Message::Quit => {
+            println!("Quit: 해체할 값이 없습니다.");
+        }
+        Message::Move { x, y } => {
+            println!("Move: x= {}, y = {}", x, y);
+        }
+        Message::Write(text) => println!("Write: {}", text),
+        _ => {}
+    }
+
+    let msg_color = Message::ChangeColor(Color::Hsv(0, 160, 255));
+
+    match msg_color {
+        Message::ChangeColor(Color::Rgb(r, g, b)) => {
+            println!("ChangeColor: R({}), G({}), B({})", r, g, b);
+        }
+        Message::ChangeColor(Color::Hsv(h, s, v)) => {
+            println!("ChangeColor: H({}), S({}), V({})", h, s, v);
+        }
+        _ => {}
+    }
+}
+```
+
+- 패턴의 값은 `_`를 사용함으로써 일부나 전체를 무시할 수 있다
+- 변수 앞에 `_`를 붙임으로써 경고 출력을 막을 수 있다
+- 하지만 변수 앞에 `_`가 붙어도 값은 바인딩 되며 소유권도 있다
+- `..`을 이용해도 값의 일부만 검사하고 나머지는 무시할 수 있다
+
+```rust
+// _의 기본 사용 예시
+fn foo(_: i32, y: i32) {
+    println!("이 함수는 매개변수로 y({})만 사용한다", y);
+}
+
+// _를 중첩해서 값의 일부만 무시하기
+let mut setting_value = Some(5);
+let new_setting_value = Some(10);
+
+match(setting_value, new_setting_value) {
+    // 패턴 안에서 _로 Some 열것값을 확인하지만 그 안에 저장된 실제 값은 사용하지 않음
+    (Some(_), Some(_)) => {
+        println!("이미 설정된 값을 덮어 쓸 수 없습니다.");
+    }
+    _ => {
+        setting_value = new_setting_value;
+    }
+}
+
+println!("현재 설정: {:?}", setting_value);
+
+// 튜플의 부분 무시하기
+let numbers = (2, 4, 6, 8, 10);
+match numbers {
+    (one, _, three, _, five) => {
+        println!("숫자 세 개: {}, {}, {}", one, three, five);
+        // 숫자 세 개: 2, 6, 10
+    }
+}
+
+// .. 사용하기
+struct Rectangle {
+    width: i32,
+    height: i32,
+    z_index: i32,
+    x_axis: i32,
+    y_axis: i32,
+}
+
+let rectangle = Rectangle {
+    width: 120,
+    height: 240,
+    z_index: 999,
+    x_axis: 50,
+    y_axis: 50,
+}
+
+match rectangle {
+    Rectangle { width, height, .. } => println!("넓이: {}, 높이: {}", width, height);
+}
+```
+
+- match 표현식의 가지에 일치해야 할 패턴 외에도 추가적인 if 조건을 지정해서 그 조건이 일치할 때만 해당 가지를 실행할 수 있는데 이것을 **매치 가드**라고 한다
+
+```rust
+let num = Some(4);
+match num {
+    Some(x) if x < 5 => println!("5보다 작은 값: {}", x),
+    Some(x) => println!("{}", x),
+    None => (),
+}
+```
+
+- `@`연산자는 어떤 값이 패턴과 일치하는지를 비교함과 동시에 그 값을 가진 변수를 생성한다
+
+```rust
+enum Name {
+    Gender { code: i32 },
+}
+
+let henry = Name::Gender { code : 10 };
+
+match henry {
+    Name::Gender { code: code_variable @ 10..=19 } => {
+        // code 값을 체크하며 code_variable에 해당 값 바인딩하기
+        println!("henry의 성별 코드는 {}", code_variable)
+    },
+    Name::Gender { code: 20..=29 } => {
+        println!("성별 코드가 여성입니다")
+    },
+    Name::Gender { code } => {
+        println!("다른 코드를 찾았습니다. {}", code)
+    }
+}
+```
+
 </div>
 </details>
