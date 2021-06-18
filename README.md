@@ -3656,3 +3656,119 @@ match henry {
 
 </div>
 </details>
+
+### Chapter 19. 러스트의 고급 기능
+
+<details>
+<summary>열기</summary>
+<div markdown="19">
+
+**19.1 안전하지 않은 러스트**
+
+- 러스트에서는 `unsafe` 키워드를 이용하여 **원시 포인터의 역참조**, **안전하지 않ㅇ느 함수나 메서드 호출**, **가변 정적 변수에 대한 접근이나 변경**, **안전하지 않은 트레이트의 구현** 등을 할 수 있다
+- `unsafe` 키워드가 반드시 메모리 안전성 관련 문제가 발생하는 것은 아니며 이는 `unsafe` 블록 내 코드가 유효한 방법으로 메모리에 접근한다는 것을 명시하기 위함임
+
+```rust
+fn main() {
+    // 참조에서 원시 포인터 생성
+    let mut num = 5;
+    let r1 = &num as *const i32;
+    let r2 = &mut num as *mut i32;
+
+    // 임의의 메모리에 접근하는 원시 포인터
+    let address = 0x012345usize;
+    let r = address as *const i32;
+
+    // unsafe 블록 안에서 원시 포인터 역참조하기
+    unsafe {
+        println!("r1 = {}", *r1);
+        println!("r2 = {}", *r2);
+        dangerous();
+    }
+
+    // 안전한 split_at_mut 함수 사용 예
+    let mut v = vec![1, 2, 3, 4, 5, 6];
+    let r = &mut v[..];
+
+    let (a, b) = r.split_at_mut(3);
+
+    assert_eq!(a, &mut [1, 2, 3]);
+    assert_eq!(b, &mut [4, 5, 6]);
+}
+unsafe fn dangerous() {
+    println!("이 함수는 unsafe 내에서 실행됩니다.")
+}
+// 안전한 코드로 구현한 split_at_mut 함수
+fn split_at_mut(slice: &mut [i32], mid: usize) -> (&mut [i32], &mut [i32]) {
+    let len = slice.len();
+
+    assert!(mid <= len);
+
+    (&mut slice[..mid], &mut slice[mid..])
+    // 이 함수는 slice를 두 번 대여할 수 없다는 에러를 출력함
+}
+
+// 안전하지 않은 코드를 이용해 split_at_mut 함수를 구현
+fn split_at_mut(slice: &mut [i32], mid: usize) -> (&mut [i32], &mut [i32]) {
+    let len = slice.len();
+    let ptr = slice.as_mut_ptr();
+
+    assert!(mid <= len);
+
+    unsafe {
+        (
+            slice::from_raw_parts_mut(ptr, mid),
+            slice::from_raw_parts_mut(ptr.offset(mid as isize), len - mid),
+        )
+    }
+}
+```
+
+- 러스트 코드를 이용해 다른 언어로 작성된 코드를 호출해야 할 때가 있는데 이 때에 `extern` 키워드를 사용할 수 있다
+- 러스트 함수를 다른 언어에서 호출할 때에도 이 `extern` 키워드를 사용할 수 있다
+
+```rust
+extern "C" {
+    fn abs(input: i32) -> i32;
+}
+
+fn main() {
+    unsafe {
+        println!("C언어에 따르면 -3의 절대값은 {}이다", abs(-3));
+    } // C언어에 따르면 -3의 절대값은 3이다
+}
+```
+
+- 러스트는 전역 변수를 허용하기는 하지만 소유권 규칙 문제가 발생할 수도 있다 정적변수는 `static` 키워드를 사용한다
+- 정적 변수의 값은 메모리의 고정된 주소를 갖지만 상수는 선언 때마다 데이터가 중복되어 생성된다
+- 또한, 정적 변수는 가변 변수가 될 수 있다
+
+```rust
+static HELLO_WORLD: &str = "안녕하세요!";
+static mut COUNTER: u32 = 0;
+
+fn main() {
+    println!("{}", HELLO_WORLD);
+
+    add_to_count(5);
+    unsafe {
+        println!("가변 변수 COUNTER: {}", COUNTER);
+    }
+}
+
+fn add_to_count(inc: u32) {
+    unsafe {
+        COUNTER += inc;
+    }
+}
+```
+
+- `unsafe` 키워드를 사용한다면 안전하지 않은 트레이트를 선언하고 구현할 수 있다
+
+```rust
+unsafe trait Foo {}
+unsafe impl Foo for i32 {}
+```
+
+</div>
+</details>
