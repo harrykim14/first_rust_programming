@@ -3770,5 +3770,46 @@ unsafe trait Foo {}
 unsafe impl Foo for i32 {}
 ```
 
+**19.2 고급 트레이트**
+
+- **연관 타입**은 타입 자리지정자를 트레이트와 연결하며 이 자리지정자 타입을 사용해 트레이트의 메서드 시그니처를 정의할 수 있다
+
+```rust
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+    // Item 타입이 자리지정자 타입으로 Option<Self::Item>을 리턴한다
+    // 제네릭을 사용한다면 구현 할 때마다 타입을 명시해야 하지만
+    // 자리지정자 타입을 사용한다면 여러번 구현하지 않도고 다른 타입을 리턴하는 메서드를 쉽게 구현할 수 있다
+}
+```
+
+- 이 문법은 연산자를 오버로딩하는 경우 자주 사용된다
+
+```rust
+use std::ops::Add;
+
+#[derive(Debug, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Add for Point {
+    type Output = Point;
+    fn add(self, other: Point) -> Point {
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+fn main() {
+    assert_eq!(Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
+               Point { x: 3, y: 3 });
+}
+```
+
 </div>
 </details>
