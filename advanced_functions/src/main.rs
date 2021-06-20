@@ -56,6 +56,65 @@ fn main() {
         Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
         Point { x: 3, y: 3 }
     );
+
+    // 같은 이름의 메서드를 선언하고 호출하기
+    let person = Human;
+
+    Pilot::fly(&person); // 안녕하세요 기장입니다.
+    Wizard::fly(&person); // 날아라! 얍!
+    person.fly(); // *양 팔을 펄럭이며 새를 흉내낸다*
+
+    // 다른 예제
+    println!("새끼 강아지 이름은 {}", Dog::baby_name());
+    // 새끼 강아지 이름은 점박이
+    println!("새끼 강아지 이름은 {}", <Dog as Animal>::baby_name());
+    // 새끼 강아지 이름은 멍멍이
+}
+
+trait Animal {
+    fn baby_name() -> String;
+}
+
+struct Dog;
+
+impl Dog {
+    fn baby_name() -> String {
+        String::from("점박이")
+    }
+}
+
+impl Animal for Dog {
+    fn baby_name() -> String {
+        String::from("멍멍이")
+    }
+}
+
+trait Pilot {
+    fn fly(&self);
+}
+
+trait Wizard {
+    fn fly(&self);
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&self) {
+        println!("안녕하세요 기장입니다.");
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&self) {
+        println!("날아라! 얍!");
+    }
+}
+
+impl Human {
+    fn fly(&self) {
+        println!("*양 팔을 펄럭이며 새를 흉내낸다*")
+    }
 }
 
 unsafe fn dangerous() {

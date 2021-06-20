@@ -3795,6 +3795,7 @@ struct Point {
     y: i32,
 }
 
+// Add 트레이트를 구현하여 + 연산자 기능 오버로딩
 impl Add for Point {
     type Output = Point;
     fn add(self, other: Point) -> Point {
@@ -3808,6 +3809,106 @@ impl Add for Point {
 fn main() {
     assert_eq!(Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
                Point { x: 3, y: 3 });
+}
+
+// 서로 다른 구조체를 더하는 Add 트레이트를 구현하기
+struct Millimeters(u32);
+struct Meters(u32);
+
+impl Add<Meters> for Millimeters {
+    type Output = Millimeters;
+
+    fn add(self, other: Meters) -> Millimeters {
+        Millimeters(self.0 + (other.0 * 1000))
+    }
+}
+```
+
+- 러스트의 트레이트는 다른 트레이트에 선언된 것과 같은 이름의 메서드를 선언할 수 있고 하나의 타입에 두 트레이트를 모두 구현할 수도 있다
+
+```rust
+trait Pilot {
+    fn fly(&self);
+}
+
+trait Wizard {
+    fn fly(&self);
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&self) {
+        println!("안녕하세요 기장입니다.");
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&self) {
+        println!("날아라! 얍!");
+    }
+}
+
+impl Human {
+    fn fly(&self) {
+        println!("*양 팔을 펄럭이며 새를 흉내낸다*")
+    }
+}
+// ---- Human 구조체를 -> Pilot, Wizard가 상속(비스무리한)
+fn main() {
+    let person = Human;
+
+    Pilot::fly(&person); // 안녕하세요 기장입니다.
+    Wizard::fly(&person); // 날아라! 얍!
+    person.fly(); // *양 팔을 펄럭이며 새를 흉내낸다*
+}
+```
+
+- 완전한 식별자 문법은 `<타입명 as 트레이트명>::함수(매개변수 들)` 과 같이 사용한다
+
+```rust
+trait Animal {
+    fn baby_name() -> String;
+}
+
+struct Dog;
+
+impl Dog {
+    fn baby_name() -> String {
+        String::from("점박이")
+    }
+}
+
+impl Animal for Dog {
+    fn baby_name() -> String {
+        String::from("멍멍이")
+    }
+}
+
+fn main() {
+    println!("새끼 강아지 이름은 {}", Dog::baby_name());
+    // 새끼 강아지 이름은 점박이
+    println!("새끼 강아지 이름은 {}", <Dog as Animal>::baby_name());
+    // 새끼 강아지 이름은 멍멍이
+}
+```
+
+- 러스트에는 한 트레이트에서 다른 트레이트의 기능을 요청하는 수퍼 트레이트가 있다
+
+```rust
+use std::fmt;
+
+trait OutlinePrint: fmt::Display {
+    fn outline_print(&self) {
+        let output = self.to_string();
+        let len = output.len();
+
+        println!("{}", "*".repeat(len + 4));
+        println!("*{}*", " ".repeat(len + 2));
+        println!("* {} *", output);
+        println!("*{}*", " ".repeat(len + 2));
+        println!("{}", "*".repeat(len + 4));
+    }
 }
 ```
 
