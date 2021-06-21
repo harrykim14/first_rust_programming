@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Add;
 use std::slice;
 
@@ -69,6 +70,24 @@ fn main() {
     // 새끼 강아지 이름은 점박이
     println!("새끼 강아지 이름은 {}", <Dog as Animal>::baby_name());
     // 새끼 강아지 이름은 멍멍이
+
+    let w = Wrapper(vec![
+        String::from("안녕하세요"),
+        String::from("러스트입니다."),
+    ]);
+    println!("w = {}", w);
+
+    // 함수 포인터
+    let answer = do_twice(add_one, 5);
+    println!("정답은 {}", answer);
+
+    // map 함수
+    let list_of_numbers = vec![1, 2, 3];
+    let list_of_strings: Vec<String> = list_of_numbers.iter().map(|i| i.to_string()).collect();
+    let list_of_strings2: Vec<String> = list_of_numbers.iter().map(ToString::to_string).collect();
+
+    println!("{:?}", list_of_strings);
+    println!("{:?}", list_of_strings2);
 }
 
 trait Animal {
@@ -160,4 +179,40 @@ impl Add for Point {
             y: self.y + other.y,
         }
     }
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+
+trait OutlinePrint: fmt::Display {
+    // 값을 애스터리스크로 꾸며서 출력하는 메서드
+    fn outline_print(&self) {
+        let output = self.to_string();
+        let len = output.len();
+
+        println!("{}", "*".repeat(len + 4));
+        println!("*{}*", " ".repeat(len + 2));
+        println!("* {} *", output);
+        println!("*{}*", " ".repeat(len + 2));
+        println!("{}", "*".repeat(len + 4));
+    }
+}
+
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+
+fn add_one(x: i32) -> i32 {
+    x + 1
+}
+
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+    f(arg) + f(arg)
 }

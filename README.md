@@ -3899,6 +3899,7 @@ fn main() {
 use std::fmt;
 
 trait OutlinePrint: fmt::Display {
+    // 값을 애스터리스크로 꾸며서 출력하는 메서드
     fn outline_print(&self) {
         let output = self.to_string();
         let len = output.len();
@@ -3910,6 +3911,236 @@ trait OutlinePrint: fmt::Display {
         println!("{}", "*".repeat(len + 4));
     }
 }
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+```
+
+- 뉴타입 패턴이란 튜플 구조체에 새로운 타입을 생성하는 것
+
+```rust
+use std::fmt;
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+
+fn main() {
+    let w = Wrapper(vec![
+        String::from("안녕하세요"),
+        String::from("러스트입니다."),
+    ]);
+    println!("w = {}", w);
+}
+```
+
+**19.3 고급 타입 시스템**
+
+- **뉴타입 패턴**은 값을 정적으로 명확히 구분하고 값의 단위를 표시하는 등의 용도로도 사용한다
+- 뉴타입 패턴의 또 다른 예로 상세 구현에 대한 추상화 제공이 있다
+- 러스트는 타입 이론에서 사용하는 잘 알려지지 않은 ! 타입을 지원하며 이 타입은 아무런 값도 없는 빈 타입처럼 동작한다
+- 이 **네버 타입**은 함수가 값을 리턴하지 않을 때 리턴 타입 자리에 사용하며 네버를 리턴하는 함수를 **발산 함수**라고 한다
+
+```rust
+fn bar() -> ! {
+    //...
+}
+```
+
+- 러스트는 특정 타입의 값에 어느 정도의 메모리를 할당해야 하는지 알아야 하며 타입의 모든 값은 반드시 같은 양의 메모리를 사용해야 한다
+- 동적 사이즈 타입을 다루기 위해 러스트는 `Sized` 트레이트를 지원한다
+
+```rust
+fn generic<T>(t: T) {}
+// 위 함수는 이렇게 작성된 것 처럼 취급된다
+fn generic<T: Sized>(t: T) {}
+// 이 제한을 완화하려면 ?Sized와 &T를 활용할 수 있다
+fn generic<T: ?Sized>(t: &T) {}
+// ?Sized 트레이트 경계는 Sized 트레이트 경계와는 반대 개념으로 T는 Sized 트레이트를 구현할 수도 있고 아닐 수도 있다
+// 타입이 Sized 트레이트를 구현하지 않을 수도 있기 때문에 T가 아닌 &T로 지정해주어야 한다
+```
+
+**19.4 고급 함수와 클로저**
+
+- 함수를 다른 함수의 인수로 전달하려면 **함수 포인터**를 이용한다
+- 클로저와 달리 fn 타입은 트레이트가 아닌 타입이기 때문에 fn을 매개변수의 타입으로 직접 명시할 수 있다
+
+```rust
+// 기본적인 함수 포인터
+fn add_one(x: i32) -> i32{
+    x + 1
+}
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+    f(arg) + f(arg)
+}
+
+fn main() {
+    let answer = do_twice(add_one, 5);
+    println!("정답은 {}", answer);
+    // map 함수는 클로저와 함수를 모두 허용한다
+    let list_of_numbers = vec![1, 2, 3];
+    let list_of_strings: Vec<String>
+        = list_of_numbers.iter()
+                         .map(|i| i.to_string())
+                         .collect();
+    let list_of_strings2: Vec<String>
+        = list_of_numbers.iter()
+                         .map(ToString::to_string)
+                         .collect();
+}
+```
+
+- 클로저는 트레이트로 표현하기 때문에 클로저를 직접 리턴할 수는 없고 따라서 Box와 같은 트레이트 객체를 사용해 우회하여 리턴해야 한다
+
+**19.5 매크로**
+
+- 매크로란 러스트에서 `macro_rules!`로 정의하는 선언적 매크로와 절차적 매크로가 있다
+  - `#[derive]` 매크로는 구조체와 열거자에 적용된 특성을 상속해서 삽입될 코드를 명시한다
+  - 특성형 매크로는 어떤 아이템에도 적용할 수 있는 사용자 정의 특성을 정의한다
+  - 함수형 매크로는 함수 호출처럼 보이지만 인수로 전달된 토큰에 적용된다
+- 기본적으로 매크로는 다른 코드를 작성하는 코드로서 **메타프로그래밍**이라고도 한다
+- 메타프로그래밍은 개발자가 작성하고 관리해야 하는 코드양을 줄이기 위한 것이고 함수 또한 이런 역할을 수행한다
+- 함수의 시그너처는 반드시 함수에 필요한 매개변수 개수와 타입을 선언해야 하지만 매크로는 매개변수가 가변적이다
+- 하지만 매크로는 정의하기 어렵고 관리하기 어렵다
+- 선언적 매크로를 정의하려면 `macro_rules!`를 사용한다
+
+```rust
+// 1. 이 매크로를 선언한 크레이트를 가져올 때 매크로도 함께 사용할 수 있도록 지시하는 macro_export 애노테이션
+#[macro_export]
+// 2. 매크로의 이름을 macro_rules!와 함께 지정하며 이 때 매크로의 이름 뒤에 !는 붙이지 않는다
+macro_rules! vec {
+    // 3. 본문에는 여러 가지 패턴을 작성할 수 있으며 이 가지에는 ($($x:expr),*) 패턴과 이 패턴에 적용되는 코드 블록이 작성되었다
+    // 매크로는 러스트의 코드 구조와 일치해야 하기 때문에 패턴 문법과는 다르게 작성된다
+    ( $( $x:expr ),* ) => {
+        // 전체 패턴은 () 괄호로 시작한다  그 다음 $()로 시작하고 이 괄호 안의 패턴과 일치하는 값을 캡처해 코드로 대체한다
+        {
+            let mut temp_vec = Vec::new();
+
+            $(
+                // $x:expr로 캡쳐한 값을 여기서 사용한다
+                temp_vec.push($x);
+            )*
+            temp_vec
+        }
+    }
+}
+```
+
+- 절차적 매크로를 생성할 때에는 반드시 각자의 크레이트 안에 정의해야 하며 특별한 크레이트 타입을 사용해야 한다
+
+```rust
+use proc_macro;
+#[some_attribute]
+    pub fn some_name(input: TokenStream) -> TokenStream {
+
+    }
+```
+
+- 사용자 정의 상속 매크로는 `#[derive(HelloMacro)]` 처럼 연관 함수를 포함하는 트레이트를 `#[derive()]`내에 표기한다
+
+```rust
+// hello_macro/src/main.rs
+use hello_macro::HelloMacro;
+use hello_macro_derive::HelloMacro;
+
+#[derive(HelloMacro)]
+struct Pancakes;
+
+fn main() {
+    Pancakes::hello_macro();
+}
+// hello_macro/scr/lib.rs
+pub trait HelloMacro {
+    fn hello_macro();
+}
+
+// hello_macro_derive/Cargo.toml
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "0.14.4"
+quote = "0.6.3"
+
+// hello_macro_derive/src/lib.rs
+extern crate proc_macro;
+
+use crate::proc_macro::TokenStream;
+use quote::quote;
+use syn;
+
+#[proc_macro_derive(HelloMacro)]
+pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
+    // TokenStream로 전달된 러스트 코드를 조작할 수 있도록 문법 트리를 구성
+    let ast = syn::parse(input).unwrap();
+    // 트레이트 구현체를 빌드
+    // syn 크레이트는 문자열 안의 러스트 코드를 구문분석해서 필요한 작업을 수행할 데이터 구조로 변환한다
+    // quote 크레이트는 syn 크레이트의 데이터 구조를 전달 받아 러스트 코드로 다시 변환한다
+    impl_hello_macro(&ast)
+}
+
+/*
+매크로의 특성이 적용된 코드를 구문분석한 후 얻게 된 인스턴스의 구조
+DeriveInput {
+    ident: Ident {
+        ident: "Pancakes",
+        span: #0 bytes(95..103)
+    },
+    data: Struct(
+        DataStruct {
+            struct_token: Struct,
+            fields: Unit,
+            semi_token: Some(
+                Semi
+            )
+        }
+    )
+}
+*/
+
+fn impl_hello_macro(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    // ast.ident 필드로부터 애노테이션이 적용된 타입의 이름을 가진 Ident 구조체의 인스턴스를 얻어온다
+    // ident: Ident { ident: "Pancakes", span: #0 bytes(95..103) }
+    let gen = quote! {
+        // quote! 매크로는 리턴할 러스트 코드를 정의한다
+        impl HelloMacro for #name {
+            // #name 템플릿을 이용하면 quote! 매크로는 이 템플릿을 변수 name의 값으로 교체한다
+            fn hello_macro() {
+                println!("안녕하세요 매크로! 내 이름은 {}입니다!", stringify!(#name));
+                // 러스트에 내장된 매크로로 문자열 리터럴로 변환한다
+            }
+        }
+        gen.into()
+    }
+}
+```
+
+- 특성형 매크로는 사용자 정의 상속 매크로와 유사하지만 `derive` 특성을 위한 코드를 생성하는 것이 아니라 새로운 특성을 생성한다
+
+```rust
+#[route(GET, "/")]
+fn index() {}
+
+#[proc_macro_attribute]
+pub fn route(attr: TokenStream, item: TokenStream) -> TokenStream {}
+```
+
+- 함수형 매크로는 `TokenStream` 타입 매개변수를 사용하며 다른 두 가지 절차적 매크로와 마찬가지로 러스트 코드를 이용해서 `TokenStream`을 조작한다
+
+```rust
+let sql = sql!(SELECT * FROM postes WHERE id = 1);
 ```
 
 </div>
