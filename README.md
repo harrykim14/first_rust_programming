@@ -4145,3 +4145,173 @@ let sql = sql!(SELECT * FROM postes WHERE id = 1);
 
 </div>
 </details>
+
+### Chapter 20. 최종 프로젝트: 다중 스레드 웹서버 구축
+
+<details>
+<summary>열기</summary>
+<div markdown="20">
+
+- 본 챕터는 바뀐 부분이 있어 해당 [공식 문서](https://doc.rust-lang.org/book/ch20-01-single-threaded.html)를 참고하였음
+- 웹서버를 구현하기 위한 단계
+  - TCP와 HTTP에 대한 사전 지식 학습
+  - 소켓으로 TCP 연결 대기하기
+  - HTTP 요청 구문 분석하기
+  - 적절한 HTTP 응답 생성하기
+  - 스레드 풀을 이용해 처리량 개선하기
+
+**20.1 단일 스레드 웹서버 구현하기**
+
+- 웹서버를 구현하는 데 주축이 되는 두 개의 프로토콜은 HTTP와 TCP이다
+
+```rust
+use std::net::TcpListener;
+
+fn main() {
+    // 127.0.0.1:7878 주소로 TCP 연결을 대기하기
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    // incoming 메서드는 연속된 스트림에 대한 반복자를 리턴한다
+    for stream in listener.incoming() {
+        // unwrap 메서드를 호출해서 스트림에 문제가 있으면 프로그램을 중단하도록 하기
+        let stream = stream.unwrap();
+        // handle_connection 함수로 stream 인스턴스를 전달한다
+        handle_connection(stream);
+    }
+}
+
+// stream 매개변수를 가변 매개변수로 선언해야 TcpStream 인스턴스 내부적으로 변경되는 것들에 대응할 수 있음
+fn handle_connection(mut stream: TcpStream) {
+    // 스택에 데이터를 저장할 buffer 인스턴스(1Mb)를 생성한다
+    let mut buffer = [0; 1024];
+    // stream.read 메서드로 이 버퍼를 전달하여 데이터를 버퍼에 채운다
+    stream.read(&mut buffer).unwrap();
+    // String::from_utf8_lossy 함수는 &[u8] 타입을 매개변수로 전달 받아 그 배열로부터 String 인스턴스를 생성한다
+    // 함수 이름 내 'lossy'의 뜻은 이 함수가 유효하지 않은 UTF-8 값을 U+FFFD REPLACEMENT CHARACTER로 대체한다는 뜻이다
+    println!("요청: {}", String::from_utf8_lossy(&buffer[..]));
+}
+
+/* 요청 결과
+요청: GET / HTTP/1.1
+Host: 127.0.0.1:7878
+Connection: keep-alive
+Cache-Control: max-age=0
+sec-ch-ua: " Not;A Brand";v="99", "Google Chrome";v="91", "Chromium";v="91"
+sec-ch-ua-mobile: ?0
+DNT: 1
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.106 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,* /*;q=0.8,application/signed-exchange;v=b3;q=0.9
+Sec-Fetch-Sit
+*/
+```
+
+- HTTP 요청/응답 형식
+
+```rust
+// 1. HTTP 요청 형식
+Method Request-URI HTTP-Version CRLF
+// request line: 클라이언트가 요청하는 정보를 표현
+// 요청 줄의 마지막은 CRLF(carriage return and line feed)로 끝을 맺는다
+headers CRLF
+// 클라이언트가 요청하는 통합 자원 식별자(URI): URL과 유사하지만 서로 다른 개념
+message-body
+
+// 2. HTTP 응답 형식
+HTTP-Version Status-Code Reason-Phrase CRLF
+// status line: 응답에 사용한 HTTP 버전과 요청의 결과를 의미하는 상태 코드와 상태코드를 설명하는 응답 구문으로 구성된다
+// 예) HTTP/1.1 200 OK\r\n\r\n
+headers CRLF
+message-body
+```
+
+- html 파일을 불러와 요청에 대한 응답으로 서버에 송신하기
+
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Index Page</title>
+  </head>
+  <body>
+    <h1>러스트로 짠 첫 페이지</h1>
+    <p>마지막 챕터의 프로젝트!</p>
+  </body>
+</html>
+```
+
+```rust
+// ...
+use std::fs;
+
+// ...
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+
+    let contents = fs::read_to_string("index.html").unwrap();
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        contents.len(),
+        contents
+    );
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+```
+
+- 요청을 검증하여 선택적으로 응답하기
+
+```rust
+// 1. 단순히 응답을 if else 문법을 사용해 두 가지로 분류하기
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+
+    let get = b"GET / HTTP/`.`\r\n";
+    // 성공했을 때엔 정상적으로 출력하기
+    if buffer.starts_with(get) {
+        let contents = fs::read_to_string("index.html").unwrap();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+            contents.len(),
+            contents
+        );
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+    // 실패했을 때엔 404 페이지를 표시하기
+    else {
+        let status_line = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
+        let contents = fs::read_to_string("404.html").unwrap();
+        let response = format!("{}{}", status_line, contents);
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+}
+
+// 2. 응답만을 리팩토링하여 중복되는 구문을 줄이기
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+    // println!("요청: {}", String::from_utf8_lossy(&buffer[..]));
+
+    // 튜플에 포함된 두 값을 let 구문을 이용해 해체하기
+    let (status_line, filename) = if buffer.starts_with(get) {
+        ("HTTP/1.1 200 OK\r\n\r\n", "index.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
+    };
+
+    let contents = fs::read_to_string("404.html").unwrap();
+    let response = format!("{}{}", status_line, contents);
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+```
+
+</div>
+</details>
