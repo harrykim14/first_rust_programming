@@ -1,0 +1,1 @@
+C:\Users\HarryKim\Documents\GitHub\first-rust-project\final_project\target\debug\main.exe: C:\Users\HarryKim\Documents\GitHub\first-rust-project\final_project\src\bin\main.rs C:\Users\HarryKim\Documents\GitHub\first-rust-project\final_project\src\lib.rs

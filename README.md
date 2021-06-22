@@ -4313,5 +4313,315 @@ fn handle_connection(mut stream: TcpStream) {
 }
 ```
 
+**20.2 다중 스레드 서버로 전환하기**
+
+- 1. 요청별로 스레드를 생성하는 코드 작성하기
+
+```rust
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        //각 스트림마다 새 스레드 생성
+        // `thread::spawn` 함수는 새로운 스레드를 생성한 후 전달된 클로저를 실행한다
+        thread::spawn(|| {
+            handle_connection(stream);
+        });
+    }
+}
+```
+
+- 2. 제한된 스레드를 사용하는 인터페이스 구현하기
+
+```rust
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    // thread::spawn 함수 대신 가상의 ThreadPool 구조체의 인터페이스를 사용
+    let pool = ThreadPool::new(4);
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        // thread::spawn 함수와 유사한 인터페이스의 pool.execute 메서드를 호출하여 클로저를 전달
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+}
+```
+
+- 3. 컴파일러 주도 개발 방식으로 ThreadPool 구조체 작성하기
+  - 연관 함수 new를 작성해야 하며 이 함수는 4라는 인수를 전달 받아야 한다
+  - 타입 매개변수 F에는 Send 트레이트 경계와 'static 수명 경계도 지정되어 있다
+  - FnOnce()는 매개변수와 리턴값이 없는 클로저를 표현하기 때문에 ()가 필요하다
+
+```rust
+// src/lib.rs
+pub struct ThreadPool {}
+
+impl ThreadPool {
+    //
+    pub fn new(size: usize) -> ThreadPool { ThreadPool }
+    /* thread::spawn 함수의 정의
+    pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+        where
+                // 이
+            F: FnOnce() -> T + Send + 'static,
+            T: Send + 'static
+    */
+    // spawn과 유사한 동작을 구현하기
+    pub fn execute<F>(&self, f: F)
+        where
+            F: FnOnce() + Send + 'static
+    {
+    }
+}
+
+// src/bin/main.rs
+use #[PROJECT_NAME]::ThreadPool; // 프로젝트 폴더명 넣기
+```
+
+- 4. new 함수가 지정된 개수의 스레드를 생성하는지 검증하기
+
+```rust
+// src/lib.rs
+use std::thread;
+
+pub struct ThreadPool {
+    threads: Vec<thread::JoinHandle<()>>,
+}
+
+impl ThreadPool {
+    /// 새 ThreadPool 인스턴스를 생성
+    ///
+    /// size 매개변수는 풀의 스레드 개수를 지정한다
+    ///
+    /// # Panics
+    ///
+    /// size 매개변수의 값이 0이면 패닉을 발생시킴
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        ThreadPool
+    }
+    //...
+}
+```
+
+- 5. 스레드를 저장할 공간 생성하기
+  - spawn 함수는 `JoinHandle<T>` 타입을 리턴한다
+  - ThreadPool 구조체에 지정된 크기의 벡터를 생성하여 for 루프에서 지정된 수 만큼 스레드를 생성하고 `thread::JoinHandle<()` 타입의 벡터 인스턴스에 저장하고 이를 ThreadPool 인스턴스에 담아 리턴한다
+
+```rust
+// src/lib.rs
+use std::thread;
+
+pub struct ThreadPool {
+    // 벡터에 저장하는 타입은 thread::JoinHandle 타입
+    threads: Vec<thread::JoinHandle<()>>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        // 스레드를 저장할 벡터를 새로 생성
+        // with_capacity 함수는 Vec::new와 같은 동작을 하지만 벡터의 공간을 미리 할당한다는 차이가 있다
+        let mut threads = Vec::with_capacity(size);
+
+        for _ in 0..size {
+            // 스레드를 생성해서 벡터에 저장한다
+        }
+
+        ThreadPool {
+            threads
+        }
+    }
+    // 생략
+}
+```
+
+- 6. 스레드 풀에서 스레드로 코드를 보내는 Worker 구조체
+  - 풀링을 구현할 때 보편적으로 사용하는 Worker 구조체를 구현
+  - 이 구조체를 JoinHandle<()>의 벡터 대신 저장한다
+  - Worker 구조체에 실행할 클로저를 전달받는 메서드를 구현
+  - 각 Worker 인스턴스는 id를 부여해 각 작업자를 구분할 것
+
+```rust
+pub struct ThreadPool {
+    // 필드를 workers 로 변경
+    workers: Vec<Worker>,
+}
+
+
+impl ThreadPool {
+    pub fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
+        assert!(size > 0);
+        let mut workers = Vec::with_capacity(size);
+
+        // for 루프의 카운터를 이용해서 Worker의 new 함수로 id 인수를 전달
+        // 새로 만들어진 Worker 인스턴스를 workers 벡터에 저장한다
+        for id in 0..size {
+            workers.push(Worker::new(id))
+        }
+
+        ThreadPool {
+            threads
+        }
+    }
+
+    pub fn execute<F>(&self, f: F)
+        where
+            F: FnOnce() + Send + 'static
+    {
+    }
+}
+
+// 이 구조체는 외부에서 사용되지 않으므로 pub 선언하지 않음
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+// Worker::new 함수는 전달된 id 매개변수와 빈 클로저를 이용해 새로 생성한 스레드에 대한 JoinHandle<()> 인스턴스를 이용해 새 Worker 인스턴스를 생성한다
+impl Worker {
+    fn new(id: usize) -> Worker {
+        let thread = thread::spawn(|| {});
+
+        Worker {
+            id,
+            thread,
+        }
+    }
+}
+```
+
+- 7. 채널을 이용해 스레드로 요청 전달하기
+  - ThreadPool 구조체는 채널을 생성하고 채널의 전달자를 저장
+  - Worker 인스턴스들은 채널의 수신자를 저장
+  - 채널에 전달할 클로저를 저장할 새로운 Job 구조체를 선언
+  - execute 메서드에서는 실행할 작업을 채널에 전달
+  - Worker 구조체는 자신이 보유한 스레드에서 채널의 수신자를 이용해 수신한 클로저를 실행
+
+```rust
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        let (sender, receiver) = mpsc::channel();
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            // Worker::new 메서드에 수신자도 전달
+            workers.push(Worker::new(id, reveiver));
+        }
+
+        ThreadPool { workers, sender }
+    }
+    //...
+}
+
+impl Worker {
+    // 수신자도 매개변수로 받도록 추가
+    fn new(id: usize, reviever: mpsc::Receiver<Job>) -> Worker {
+        let thread = thread::spawn(|| {
+            reviever;
+        });
+
+        Worker { id, thread }
+    }
+}
+```
+
+- 모든 작업자가 하나의 수신자를 공유하면서 작업을 여러 스레드로 분산하고자 한다면 `Arc<Mutex<T>>` 타입을 사용해야 한다
+
+```rust
+use std::sync::Arc;
+use std::sync::Mutex;
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+        let (sender, receiver) = mpsc::channel();
+
+        let reveiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            // Worker::new 함수는 Arc::clone 함수로 수신자의 주소를 복사하여 전달
+            workers.push(Worker::new(id, Arc::clone(&reveiver)));
+        }
+
+        ThreadPool { workers, sender }
+    }
+    //...
+}
+
+impl Worker {
+    // Worker::new 수신자의 주소에 저장된 타입은 Arc<Mutex<T>> 타입이다
+    // (ThreadPool 구조체 내에서 reveiver를 Arc::new(Mutex::new(receiver))로 정의함)
+    fn new(id: usize, reviever: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(|| {
+            reviever;
+        });
+
+        Worker { id, thread }
+    }
+}
+```
+
+- 8. execute 메서드 구현하기
+
+```rust
+type Job = Box<FnOnce() + Send + 'static>;
+
+impl ThreadPool {
+    //...
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        // 전달된 클로저를 이용해 Job 인스턴스를 생성하고 채널에 전달하기
+        let job = Box::new(f);
+        self.sender.send(job).unwrap();
+    }
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let job = receiver.lock() // receiver 매개변수의 lock 메서드를 호출하여 뮤텍스로부터 락을 획득
+                              .unwrap() // 락을 획득하지 못한다면 패닉을 리턴하기 위한 1차 unwrap 메서드
+                              .recv() // 락을 획득했다면 recv 메서드를 호출하여 Job 인스턴스를 수신
+                              .unwrap(); // recv 메서드의 에러 처리를 위한 2차 unwrap 메서드
+            println!("시작: 작업자 {}", id);
+            (*job)();
+        });
+
+        Worker { id, thread }
+    }
+}
+```
+
+- 이 때, `Box<T>` 내에 있는 FnOnce 클로저를 호출하기 위해서는 `Box<T>` 바깥으로 이동해야 하지만 러스트는 `Box<T>` 내에 저장된 값의 크기를 모르므로 이를 우회하기 위해 `self: Box<Self>` 문법을 이용한다
+
+```rust
+// FnBox 트레이트는 call_box 메서드를 갖는다
+trait FnBox {
+    // 이 메서드는 Box<T>의 바깥으로 옮기며 self 매개변수에 대한 소유권을 갖는다
+    fn call_box(self: Box<Self>);
+}
+
+// FnOnce() 트레이트를 구현하는 모든 F 타입 매개변수에 대해 FnBox 트레이트를 구현하여 call_box 메서드를 호출할 수 있도록 선언
+impl<F: FnOnce()> FnBox for F {
+    fn call_box(self: Box<F>) {
+        // call_box()를 호출하면 self의 소유권을 갖는다
+        (*self)()
+    }
+}
+
+type Job = Box<dyn FnBox + Send + 'static>;
+```
+
+- 이 작업자 스레드를 `while let` 구문으로 구현하지 않는 이유는 뮤텍스의 락을 획득하고 해제하는 작업이 원활하지 않을 수 있기 때문
+
 </div>
 </details>
