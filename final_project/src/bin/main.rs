@@ -13,13 +13,15 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     let pool = ThreadPool::new(4);
     // incoming 메서드는 연속된 스트림에 대한 반복자를 리턴한다
-    for stream in listener.incoming() {
+    for stream in listener.incoming().take(2) {
         // unwrap 메서드를 호출해서 스트림에 문제가 있으면 프로그램을 중단하도록 하기
         let stream = stream.unwrap();
         pool.execute(|| {
             handle_connection(stream);
         });
     }
+
+    println!("종료:주 스레드");
 }
 
 fn handle_connection(mut stream: TcpStream) {

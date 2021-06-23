@@ -4623,5 +4623,130 @@ type Job = Box<dyn FnBox + Send + 'static>;
 
 - 이 작업자 스레드를 `while let` 구문으로 구현하지 않는 이유는 뮤텍스의 락을 획득하고 해제하는 작업이 원활하지 않을 수 있기 때문
 
+**20.3 우아한 종료와 해제**
+
+- 스레드 풀에 Drop 트레이트를 구현하여 풀이 해제되면 스레드를 모두 조인해서 작업이 완료될 때 까지 기다린다
+
+```rust
+// 스레드 풀이 범위를 벗어날 때 각 스레드를 조인시키기
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        // 각 스레드의 workers를 순회
+        for worker in &mut self.workers {
+            println!("종료: 작업자 {}", worker.id);
+            // 여기서 스레드의 join 메서드를 호출
+            worker.thread.join().unwrap();
+            // 여기서 worker 인스턴스에 대한 가변 대여값만을 가지고 있어서 join 메서드를 호출할 수 없다
+        }
+    }
+}
+```
+
+- Worker 구조체가 `Option<thread::JoinHandle()>` 타입이라면 take 메서드를 호출하여 Some 열것값에 저장된 값을 바깥으로 꺼내오고 그 자리에 None 값을 대신 할당할 수 있다
+
+```rust
+struct Worker {
+    id: usize,
+    thread: Option<thread::JoinHandle<()>>,
+    // thread 필드의 타입을 Option<thread::JoinHandle<()>>로 변경했으므로
+}
+
+impl Worker {
+    //...
+        Worker {
+            id,
+            thread: Some(thread), // 이 부분 또한 변경되어야 한다
+        }
+    }
+}
+
+// 그리고 if let 구문으로 타입 가드 및 Some 열것값을 가져오게 변경한다
+impl ThreadPool {
+    //...
+     fn drop(&mut self) {
+        for worker in &mut self.workers {
+            println!("종료: 작업자 {}", worker.id);
+            /* 이 부분 */
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+```
+
+- 이 작업들은 Worker 인스턴스의 스레드가 실행하는 클로저 내의 로직이 무한 루프에 빠지기 때문에 스레드가 종료되지 않는다
+- 이를 해결하기 위해서는 실행할 작업을 큐에서 가져오거나 대기를 중지하고 무한 루프를 빠져나오는 작업으로 수정해야 한다
+
+```rust
+// 스레드의 메세지를 주고받을 수 있게 열거자 Message를 새로 정의
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Message>,
+    // 수신자의 제네릭을 Message로 변경하여 Job 타입 대신 Message 타입을 전달하도록 함
+}
+
+impl ThreadPool {
+    // ...
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+        // 따라서 ThreadPool 에서도 수신자가 Message의 NewJob 열것값을 통해 Job을 가지도록 한다
+        self.sender.send(Message::NewJob(job)).unwrap();
+    }
+}
+
+impl Worker {
+    // Worker도 이 메세지를 수신받기 위해서 reviver의 타입이 Arc<Mutex<mpsc::Receiver<Message>>>가 되고 (이전엔 Job 타입이었음)
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv().unwrap();
+
+            // message의 열것값인 NewJob(job)과 Terminate 값에 따라 match 값을 설정하고 Terminate 메세지가 온다면 break 하여 무한 루프에서 벗어난다
+            match message {
+                Message::NewJob(job) => {
+                    println!("시작: 작업자 {}", id);
+                    job.call_box();
+                }
+                Message::Terminate => {
+                    println!("종료 메세지 수신: 작업자 {}", id);
+                    break;
+                }
+            }
+        });
+
+        Worker {
+            id,
+            thread: Some(thread),
+        }
+    }
+}
+
+// 각 작업자 스레드의 join 메서드를 호출하기 전에 Message::Terminate 값을 보내야 하는데 이는 drop 메서드에서 실행한다
+impl ThreadPool {
+    fn drop(&mut self) {
+        println!("모든 작업자 종료");
+        // workers 벡터를 두 번 순회한다
+        // 종료 메세지를 처음에 보내게 되면 종료 메세지를 수신한 후로는 더 이상 채널로부터 요청을 수신하지 않는다
+        for _ in &mut self.workers {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+        for worker in &mut self.workers {
+            println!("종료: 작업자 {}", worker.id);
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+```
+
 </div>
 </details>
